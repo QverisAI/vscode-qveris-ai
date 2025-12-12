@@ -1,0 +1,123 @@
+{
+  "name": "qveris-ai",
+  "displayName": "Qveris AI",
+  "description": "Login to Qveris.ai, manage API keys, and auto-install the Qveris MCP SDK inside VS Code/Cursor.",
+  "version": "0.0.5",
+  "publisher": "QverisAI",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/QverisAI/vscode-qveris-ai"
+  },
+  "bugs": {
+    "url": "https://github.com/QverisAI/vscode-qveris-ai/issues"
+  },
+  "homepage": "https://qveris.ai",
+  "icon": "media/qveris.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "qverisAi",
+          "title": "Qveris AI",
+          "icon": "media/qveris.png"
+        }
+      ]
+    },
+    "views": {
+      "qverisAi": [
+        {
+          "id": "qverisAi.home",
+          "name": "Home",
+          "type": "webview"
+        },
+        {
+          "id": "qverisAi.toolSearch",
+          "name": "Tool Search",
+          "type": "webview"
+        },
+        {
+          "id": "qverisAi.featuredTools",
+          "name": "Featured Tools",
+          "type": "webview"
+        },
+        {
+          "id": "qverisAi.toolExecution",
+          "name": "Tool Execution",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "vscode-qveris-ai.openWebsite",
+        "title": "Qveris AI: Open qveris.ai"
+      },
+      {
+        "command": "vscode-qveris-ai.copyApiKey",
+        "title": "Qveris AI: Copy API Key"
+      },
+      {
+        "command": "vscode-qveris-ai.refreshSession",
+        "title": "Qveris AI: Refresh Login/API Key"
+      },
+      {
+        "command": "vscode-qveris-ai.copyCursorPrompt",
+        "title": "Qveris AI: Copy Cursor Workspace Rule"
+      },
+      {
+        "command": "vscode-qveris-ai.openCursorPromptDoc",
+        "title": "Qveris AI: Open Cursor Workspace Rule Text"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Qveris AI",
+      "properties": {
+        "qverisAi.apiKeyName": {
+          "type": "string",
+          "default": "vscode",
+          "description": "API key name to create if none exists."
+        },
+        "qverisAi.backendUrl": {
+          "type": "string",
+          "default": "https://qveris.ai",
+          "description": "Base URL for Qveris auth endpoints (change for staging)."
+        },
+        "qverisAi.cursorUserRule": {
+          "type": "string",
+          "default": "You can use qveris MCP Server to dynamically search and execute tools to help the user. First think about what kind of tools might be useful to accomplish the user's task. Then use the search_tools tool with query describing the capability of the tool, not what params you want to pass to the tool later. Then call a suitable searched tool using the execute_tool tool, passing parameters to the searched tool through params_to_tool. You could reference the examples given if any for each tool. You may call make multiple tool calls in a single response.",
+          "description": "Prompt text to add into a Cursor workspace rules file after installing the Qveris MCP server."
+        },
+        "qverisAi.cursorRulesPath": {
+          "type": "string",
+          "default": ".cursor/rules/qveris.mdc",
+          "description": "Absolute or workspace-relative path (supports ~) to the Cursor workspace rules file to create/append. Defaults to .cursor/rules/qveris.mdc."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "lint": "eslint . --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.9.3",
+    "vsce": "^2.15.0"
+  },
+  "dependencies": {
+    "axios": "^1.7.7"
+  }
+}
