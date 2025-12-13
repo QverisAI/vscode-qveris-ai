@@ -522,7 +522,7 @@ class ToolSearchViewProvider implements vscode.WebviewViewProvider {
 
       const searchResponse = await axios.post(
         searchUrl,
-        { query: query.trim() },
+        { query: query.trim(), limit: 5 },
         {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -875,44 +875,48 @@ class ToolExecutionViewProvider implements vscode.WebviewViewProvider {
       localResourceRoots: [this.context.extensionUri]
     };
     
-    webviewView.onDidChangeVisibility(async () => {
-      if (webviewView.visible) {
-        // Check for selected tool when view becomes visible
-        const selectedTool = this.context.globalState.get<any>('selectedTool');
-        if (selectedTool && this.view) {
-          this.view.webview.postMessage({ type: 'toolSelected', tool: selectedTool });
-        } else if (this.view) {
-          // Clear content if no tool is selected
-          this.view.webview.postMessage({ type: 'toolSelected', tool: null });
-        }
-      }
-    });
-
     webviewView.webview.html = this.getHtml(webviewView.webview);
 
+    // Track last sent tool to avoid unnecessary updates
+    let lastSentToolId: string | null = null;
+    
     // Function to check and update selected tool
     const checkAndUpdateTool = async () => {
       if (!this.view) return;
       const selectedTool = this.context.globalState.get<any>('selectedTool');
-      if (selectedTool) {
-        this.view.webview.postMessage({ type: 'toolSelected', tool: selectedTool });
-      } else {
-        // Clear content if no tool is selected
-        this.view.webview.postMessage({ type: 'toolSelected', tool: null });
+      const currentToolId = selectedTool ? (selectedTool.tool_id || selectedTool.tool) : null;
+      
+      // Only send message if tool has actually changed
+      if (currentToolId !== lastSentToolId) {
+        lastSentToolId = currentToolId;
+        if (selectedTool) {
+          this.view.webview.postMessage({ type: 'toolSelected', tool: selectedTool });
+        } else {
+          // Clear content if no tool is selected
+          this.view.webview.postMessage({ type: 'toolSelected', tool: null });
+        }
       }
     };
+
+    webviewView.onDidChangeVisibility(async () => {
+      if (webviewView.visible) {
+        // Check for selected tool when view becomes visible
+        await checkAndUpdateTool();
+      }
+    });
 
     // Check for selected tool on initialization
     setTimeout(() => {
       checkAndUpdateTool();
     }, 100);
 
-    // Set up periodic check for tool selection changes (every 500ms)
+    // Set up periodic check for tool selection changes (every 2 seconds, less frequent)
+    // Only check when view is visible and not too frequently to avoid interfering with execution results
     const checkInterval = setInterval(() => {
       if (this.view && webviewView.visible) {
         checkAndUpdateTool();
       }
-    }, 500);
+    }, 2000);
 
     // Clean up interval when view is disposed
     this.context.subscriptions.push({
@@ -1017,12 +1021,14 @@ class ToolExecutionViewProvider implements vscode.WebviewViewProvider {
         <style>${styles}</style>
       </head>
       <body>
-        <div id="tool-execution-content">
-          <div class="status">Select a tool to execute.</div>
-        </div>
+        <div id="tool-execution-content"></div>
         <script nonce="${nonce}">
           const vscode = acquireVsCodeApi();
           const toolExecutionContent = document.getElementById('tool-execution-content');
+          let currentToolId = null;
+          let savedResult = null;
+          let isExecuting = false;
+          let hasExecutionResult = false;
           
           function escapeHtml(text) {
             if (!text) return '';
@@ -1033,13 +1039,64 @@ class ToolExecutionViewProvider implements vscode.WebviewViewProvider {
           
           function showToolExecution(tool) {
             if (!toolExecutionContent) return;
+
+            console.log('Tool Execution: showToolExecution called, tool:', tool ? (tool.tool_id || tool.tool) : null);
+
+            // If no tool, clear content completely
+            if (!tool) {
+              console.log('Tool Execution: No tool provided, clearing content');
+              toolExecutionContent.innerHTML = '';
+              currentToolId = null;
+              savedResult = null;
+              isExecuting = false;
+              hasExecutionResult = false;
+              return;
+            }
+
+            const toolId = tool.tool_id || tool.tool;
+
+            // Never re-render if currently executing
+            if (isExecuting) {
+              console.log('Tool Execution: Currently executing, skipping re-render');
+              return;
+            }
+
+            // If tool hasn't changed, preserve existing content completely
+            if (currentToolId === toolId) {
+              console.log('Tool Execution: Tool ID same as current, checking if we should preserve content');
+              // Check if there's an execution result - if so, never re-render
+              if (hasExecutionResult) {
+                console.log('Tool Execution: hasExecutionResult is true, preserving content');
+                return;
+              }
+              // Check if execution result exists and is visible
+              const existingResultDiv = document.getElementById('execution-result');
+              if (existingResultDiv) {
+                const isVisible = existingResultDiv.style.display !== 'none' &&
+                                 existingResultDiv.offsetParent !== null;
+                if (isVisible && existingResultDiv.innerHTML.trim() !== '') {
+                  console.log('Tool Execution: Execution result visible, setting hasExecutionResult to true');
+                  hasExecutionResult = true;
+                  return;
+                }
+              }
+              // If content exists and form exists, preserve it
+              const existingForm = document.getElementById('tool-execution-form');
+              if (existingForm && toolExecutionContent.innerHTML.trim() !== '') {
+                console.log('Tool Execution: Form exists and content not empty, preserving');
+                return;
+              }
+            } else {
+              // Tool changed, reset flags
+              console.log('Tool Execution: Tool changed, resetting flags');
+              hasExecutionResult = false;
+            }
+            
+            currentToolId = toolId;
             
             // Clear previous content
-            toolExecutionContent.innerHTML = '<div class="status">Select a tool to execute.</div>';
+            toolExecutionContent.innerHTML = '';
             
-            if (!tool) return;
-            
-            const toolId = tool.tool_id || tool.tool;
             const params = tool.params || {};
             const examples = tool.examples || {};
             const sampleParams = examples.sample_parameters || {};
@@ -1094,6 +1151,16 @@ class ToolExecutionViewProvider implements vscode.WebviewViewProvider {
             
             toolExecutionContent.innerHTML = html;
             
+            // Restore saved result if exists
+            if (savedResult) {
+              const resultDiv = document.getElementById('execution-result');
+              if (resultDiv) {
+                resultDiv.style.display = 'block';
+                resultDiv.className = savedResult.className || 'execution-result';
+                resultDiv.innerHTML = savedResult.innerHTML;
+              }
+            }
+            
             const toggleOptional = document.getElementById('toggle-optional');
             if (toggleOptional) {
               let optionalExpanded = false;
@@ -1130,6 +1197,10 @@ class ToolExecutionViewProvider implements vscode.WebviewViewProvider {
                   resultDiv.style.display = 'block';
                   resultDiv.innerHTML = '<div class="status">Executing...</div>';
                 }
+                // Clear saved result when starting new execution
+                savedResult = null;
+                isExecuting = true;
+                hasExecutionResult = false;
                 
                 vscode.postMessage({ 
                   type: 'execute', 
@@ -1184,27 +1255,45 @@ class ToolExecutionViewProvider implements vscode.WebviewViewProvider {
               if (msg.tool) {
                 showToolExecution(msg.tool);
               } else {
-                // Clear content when no tool is selected - don't show any history
+                // Clear content when no tool is selected - completely empty
                 if (toolExecutionContent) {
-                  toolExecutionContent.innerHTML = '<div class="status">Select a tool to execute.</div>';
+                  toolExecutionContent.innerHTML = '';
                 }
+                currentToolId = null;
+                savedResult = null;
+                isExecuting = false;
+                hasExecutionResult = false;
               }
             }
             if (msg.type === 'executeProgress' && msg.status === 'starting') {
+              isExecuting = true;
+              hasExecutionResult = false;
               const executeButton = document.getElementById('execute-button');
               if (executeButton) executeButton.disabled = true;
-            }
-            if (msg.type === 'executeProgress' && msg.status === 'done') {
-              const executeButton = document.getElementById('execute-button');
-              if (executeButton) executeButton.disabled = false;
+              // Clear saved result when starting new execution
+              savedResult = null;
             }
             if (msg.type === 'executeSuccess') {
+              console.log('Tool Execution: Received executeSuccess message');
               const resultDiv = document.getElementById('execution-result');
               if (resultDiv) {
+                console.log('Tool Execution: Setting result div content');
                 resultDiv.style.display = 'block';
                 resultDiv.className = 'execution-result';
                 resultDiv.innerHTML = '<pre>' + JSON.stringify(msg.data, null, 2) + '</pre>';
+                // Mark that we have an execution result - this prevents re-rendering
+                hasExecutionResult = true;
+                // Save result to restore after re-render
+                savedResult = {
+                  className: resultDiv.className,
+                  innerHTML: resultDiv.innerHTML
+                };
+                console.log('Tool Execution: Result displayed, hasExecutionResult set to true');
+              } else {
+                console.error('Tool Execution: Could not find execution-result div');
               }
+              // Execution is complete, set flags
+              isExecuting = false;
               const executeButton = document.getElementById('execute-button');
               if (executeButton) executeButton.disabled = false;
             }
@@ -1214,9 +1303,26 @@ class ToolExecutionViewProvider implements vscode.WebviewViewProvider {
                 resultDiv.style.display = 'block';
                 resultDiv.className = 'execution-result error';
                 resultDiv.innerHTML = '<div class="status error">' + (msg.message || 'Execution failed') + '</div>';
+                // Mark that we have an execution result - this prevents re-rendering
+                hasExecutionResult = true;
+                // Save result to restore after re-render
+                savedResult = {
+                  className: resultDiv.className,
+                  innerHTML: resultDiv.innerHTML
+                };
               }
+              // Execution is complete, set flags
+              isExecuting = false;
               const executeButton = document.getElementById('execute-button');
               if (executeButton) executeButton.disabled = false;
+            }
+            if (msg.type === 'executeProgress' && msg.status === 'done') {
+              // Only set isExecuting to false if we haven't already processed the result
+              if (!hasExecutionResult) {
+                isExecuting = false;
+                const executeButton = document.getElementById('execute-button');
+                if (executeButton) executeButton.disabled = false;
+              }
             }
           });
         </script>

@@ -8,10 +8,9 @@ Qveris is an intelligent tool platform for developers, providing MCP servers wit
 ## What the Extension Does
 - **Sidebar Login**: Sign in with email/password in the sidebar.
 - **Auto Get/Create API Key**: After successful login, the full API key is securely saved in VS Code Secrets.
-- **One-Click Open Website**: Button opens qveris.ai in your default browser.
-- **Auto Install MCP SDK**: Automatically executes `npx @qverisai/sdk` and verifies when `@qverisai/sdk` is not detected.
 - **Auto Write MCP Config**: Writes `QVERIS_API_KEY` to `~/.cursor/mcp.json` and workspace `.vscode/mcp.json` for easy use with Cursor / VS Code Qveris MCP.
 - **Cursor Rules Prompt**: Automatically adds MCP prompt text in Cursor workspace (configurable path).
+- **Search And Execute**: Search and run Qveris AI tools directly.
 
 ## Requirements
 - VS Code 1.85+ or Cursor
