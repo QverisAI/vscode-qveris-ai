@@ -80,7 +80,7 @@ export class ToolSearchViewProvider implements vscode.WebviewViewProvider {
 
       const searchResponse = await axios.post(
         searchUrl,
-        { query: query.trim(), limit: 5 },
+        { query: query.trim(), limit: 10 },
         {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -240,6 +240,15 @@ export class ToolSearchViewProvider implements vscode.WebviewViewProvider {
               
               const meta = document.createElement('div');
               meta.className = 'tool-item-meta';
+              
+              // Display tool_id
+              if (tool.tool_id || tool.tool) {
+                const toolIdSpan = document.createElement('span');
+                toolIdSpan.textContent = 'ID: ' + (tool.tool_id || tool.tool);
+                toolIdSpan.style.fontFamily = 'monospace';
+                toolIdSpan.style.fontSize = '11px';
+                meta.appendChild(toolIdSpan);
+              }
               
               if (tool.final_score !== undefined) {
                 const matched = document.createElement('span');

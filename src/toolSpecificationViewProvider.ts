@@ -49,6 +49,10 @@ export class ToolSpecificationViewProvider implements vscode.WebviewViewProvider
       }
     });
 
+    // Send Cursor IDE status to webview immediately
+    const isCursor = !!process.env.CURSOR || (vscode.env.appName || '').toLowerCase().includes('cursor');
+    webviewView.webview.postMessage({ type: 'cursorStatus', isCursor });
+    
     // Check for selected tool on initialization
     setTimeout(() => {
       checkAndUpdateTool();
@@ -73,6 +77,9 @@ export class ToolSpecificationViewProvider implements vscode.WebviewViewProvider
       switch (message.type) {
         case 'execute':
           await this.handleExecute(message.toolId, message.parameters);
+          break;
+        case 'genCode':
+          await this.handleGenCode(message.tool);
           break;
         case 'checkTool':
           // Allow manual check via message
@@ -130,6 +137,116 @@ export class ToolSpecificationViewProvider implements vscode.WebviewViewProvider
     }
   }
 
+  private async handleGenCode(tool: any) {
+    if (!this.view) return;
+
+    // Check if we're in Cursor IDE
+    const isCursor = !!process.env.CURSOR || (vscode.env.appName || '').toLowerCase().includes('cursor');
+    if (!isCursor) {
+      vscode.window.showWarningMessage('Gen Code feature is only available in Cursor IDE.');
+      return;
+    }
+
+    if (!tool) {
+      vscode.window.showWarningMessage('No tool selected.');
+      return;
+    }
+
+    try {
+      // Build prompt for code generation
+      const toolId = tool.tool_id || tool.tool;
+      const toolName = tool.name || toolId;
+      const toolDescription = tool.description || '';
+      const params = tool.params || {};
+      const examples = tool.examples || {};
+      const sampleParams = examples.sample_parameters || {};
+
+      // Format parameters for the prompt
+      let paramsDescription = '';
+      if (Array.isArray(params)) {
+        paramsDescription = params.map((p: any) => {
+          const name = p.name || p.key || String(p);
+          const desc = p.description || '';
+          const required = p.required !== false ? 'required' : 'optional';
+          return `- ${name} (${required}): ${desc}`;
+        }).join('\n');
+      } else {
+        paramsDescription = Object.keys(params).map(key => {
+          const p = params[key];
+          const name = typeof p === 'object' && p !== null ? (p.name || p.key || key) : key;
+          const desc = typeof p === 'object' && p !== null ? (p.description || '') : '';
+          const required = typeof p === 'object' && p !== null && p.required !== false ? 'required' : 'optional';
+          return `- ${name} (${required}): ${desc}`;
+        }).join('\n');
+      }
+
+      const prompt = `根据 qveris api 接口文档生成调用工具 "${toolName}" (tool_id: ${toolId}) 的代码实现。
+
+工具描述：${toolDescription}
+
+参数：
+${paramsDescription}
+
+示例参数：
+${JSON.stringify(sampleParams, null, 2)}
+
+请生成完整的代码实现，包括：
+1. 导入必要的依赖
+2. 调用 Qveris API 执行工具的代码
+3. 错误处理
+4. 使用示例参数作为默认值
+
+请参考 @qveris_ai_api 规则中的 API 文档。`;
+
+      // Create a new document with the prompt and tool information
+      const docContent = `// Tool: ${toolName} (${toolId})
+// Description: ${toolDescription}
+//
+// Parameters:
+${paramsDescription.split('\n').map((line: string) => `// ${line}`).join('\n')}
+//
+// Example parameters:
+// ${JSON.stringify(sampleParams, null, 2).split('\n').join('\n// ')}
+//
+// ${prompt}
+//
+// Please use Cursor AI (Cmd/Ctrl+K or Cmd/Ctrl+L) and reference @qveris_ai_api to generate the code.
+
+`;
+
+      const doc = await vscode.workspace.openTextDocument({
+        content: docContent,
+        language: 'typescript'
+      });
+      
+      const editor = await vscode.window.showTextDocument(doc, { preview: false });
+      
+      // Try to trigger Cursor AI chat with the prompt
+      // First, try to use cursor.action.chat command if available
+      try {
+        await vscode.commands.executeCommand('cursor.action.chat', {
+          message: prompt,
+          references: ['@qveris_ai_api']
+        });
+      } catch (cmdError: any) {
+        // If cursor.action.chat doesn't work, try cursor.action.inlineChat
+        try {
+          await vscode.commands.executeCommand('cursor.action.inlineChat', {
+            message: prompt
+          });
+        } catch (inlineError: any) {
+          // If both fail, just show a message to guide the user
+          vscode.window.showInformationMessage(
+            `Please use Cursor AI (Cmd/Ctrl+K or Cmd/Ctrl+L) to generate code for tool: ${toolName}. The prompt has been added to the document. Reference @qveris_ai_api in your prompt.`,
+            'OK'
+          );
+        }
+      }
+    } catch (error: any) {
+      vscode.window.showErrorMessage(`Failed to generate code: ${error?.message || error}`);
+    }
+  }
+
   private getHtml(webview: vscode.Webview): string {
     const nonce = getNonce();
     const styles = `
@@ -173,6 +290,7 @@ export class ToolSpecificationViewProvider implements vscode.WebviewViewProvider
           let savedResult = null;
           let isExecuting = false;
           let hasExecutionResult = false;
+          let isCursorIDE = false;
           
           function escapeHtml(text) {
             if (!text) return '';
@@ -284,8 +402,9 @@ export class ToolSpecificationViewProvider implements vscode.WebviewViewProvider
                       </div>
                       \${optionalParams.map(p => renderParamField(p, sampleParams[p.key], true)).join('')}
                     \` : ''}
-                    <div style="margin-top: 12px;">
+                    <div style="margin-top: 12px; display: flex; gap: 8px;">
                       <button type="submit" id="execute-button">Execute</button>
+                      <button type="button" id="gen-code-button">Gen Code</button>
                     </div>
                   </form>
                   <div id="execution-result" style="display:none;"></div>
@@ -294,6 +413,21 @@ export class ToolSpecificationViewProvider implements vscode.WebviewViewProvider
             \`;
             
             toolExecutionContent.innerHTML = html;
+            
+            // Show Gen Code button if in Cursor IDE
+            const genCodeButton = document.getElementById('gen-code-button');
+            if (genCodeButton) {
+              // Always set up the click handler
+              genCodeButton.onclick = () => {
+                vscode.postMessage({
+                  type: 'genCode',
+                  tool: tool
+                });
+              };
+              // Show button by default, will be hidden if not Cursor IDE when cursorStatus message arrives
+              // This ensures the button is visible even if cursorStatus hasn't arrived yet
+              genCodeButton.style.display = 'inline-block';
+            }
             
             // Restore saved result if exists
             if (savedResult) {
@@ -395,6 +529,14 @@ export class ToolSpecificationViewProvider implements vscode.WebviewViewProvider
 
           window.addEventListener('message', (event) => {
             const msg = event.data;
+            if (msg.type === 'cursorStatus') {
+              isCursorIDE = msg.isCursor || false;
+              // Update Gen Code button visibility if tool is already displayed
+              const genCodeButton = document.getElementById('gen-code-button');
+              if (genCodeButton) {
+                genCodeButton.style.display = isCursorIDE ? 'inline-block' : 'none';
+              }
+            }
             if (msg.type === 'toolSelected') {
               if (msg.tool) {
                 showToolExecution(msg.tool);

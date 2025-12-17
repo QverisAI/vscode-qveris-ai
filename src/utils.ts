@@ -182,15 +182,10 @@ function resolveRulesPath(filePath: string, workspaceRoot: string) {
 }
 
 function buildRulesFileContent(existing: string) {
-  if (!existing.trim()) {
-    return ['---', 'alwaysApply: true', '---', '', '<context>' + CURSOR_PROMPT + '</context>', ''].join('\n');
-  }
-
-  const needsGap = existing && !existing.endsWith('\n');
-  return existing + (needsGap ? '\n\n' : '\n') + '<context>' + CURSOR_PROMPT + '</context>' + '\n';
+  return ['---', 'description: Utilizing third-party APIs to retrieve and process data is applicable in various fields such as finance, economics, healthcare, sports, scientific research, and more', 'alwaysApply: false', '---', '', CURSOR_PROMPT, ''].join('\n');
 }
 
-export async function maybeEnsureCursorPromptInRules(context: vscode.ExtensionContext) {
+export async function maybeEnsureCursorPromptInRules(context: vscode.ExtensionContext, forceReplace: boolean = false) {
   if (!isCursorApp()) return;
 
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -203,21 +198,60 @@ export async function maybeEnsureCursorPromptInRules(context: vscode.ExtensionCo
 
   try {
     const existing = await fs.readFile(rulesPath, 'utf8').catch(() => '');
-    if (existing.includes(CURSOR_PROMPT)) {
+    
+    // If forceReplace is true or file doesn't contain the prompt, write/update it
+    if (forceReplace || !existing.includes(CURSOR_PROMPT)) {
+      const dir = path.dirname(rulesPath);
+      await fs.mkdir(dir, { recursive: true });
+
+      const newContent = buildRulesFileContent(existing);
+
+      await fs.writeFile(rulesPath, newContent, 'utf8');
       await context.globalState.update('qverisCursorPromptCopied', true);
+      if (forceReplace) {
+        vscode.window.showInformationMessage('Qveris MCP prompt updated in workspace rules file.');
+      } else {
+        vscode.window.showInformationMessage('Qveris MCP prompt written to this workspace rules file.');
+      }
+    } else {
+      await context.globalState.update('qverisCursorPromptCopied', true);
+    }
+  } catch (error: any) {
+    vscode.window.showErrorMessage(`Failed to write Qveris prompt to workspace rules: ${error?.message || error}`);
+  }
+}
+
+export async function maybeEnsureQverisApiRule(context: vscode.ExtensionContext, forceReplace: boolean = false) {
+  if (!isCursorApp()) return;
+
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+  if (!workspaceFolder) return;
+
+  const workspaceRoot = workspaceFolder.uri.fsPath;
+  const apiRulePath = path.join(workspaceRoot, '.cursor', 'rules', 'qveris_ai_api.mdc');
+
+  try {
+    // Read the qveris_api.md file from extension
+    const extensionPath = context.extensionPath;
+    const apiDocPath = path.join(extensionPath, 'src', 'qveris_api.md');
+    const apiDocContent = await fs.readFile(apiDocPath, 'utf8');
+
+    // Check if rule already exists and if we should replace it
+    const existing = await fs.readFile(apiRulePath, 'utf8').catch(() => '');
+    if (!forceReplace && existing.trim()) {
+      // Rule already exists and we're not forcing replacement, skip
       return;
     }
 
-    const dir = path.dirname(rulesPath);
+    // Create directory if it doesn't exist
+    const dir = path.dirname(apiRulePath);
     await fs.mkdir(dir, { recursive: true });
 
-    const newContent = buildRulesFileContent(existing);
-
-    await fs.writeFile(rulesPath, newContent, 'utf8');
-    await context.globalState.update('qverisCursorPromptCopied', true);
-    vscode.window.showInformationMessage('Qveris MCP prompt written to this workspace rules file.');
+    // Write the rule file with the API documentation content
+    await fs.writeFile(apiRulePath, apiDocContent, 'utf8');
   } catch (error: any) {
-    vscode.window.showErrorMessage(`Failed to write Qveris prompt to workspace rules: ${error?.message || error}`);
+    // Silently fail - this is not critical
+    console.error(`Failed to create qveris_ai_api rule: ${error?.message || error}`);
   }
 }
 

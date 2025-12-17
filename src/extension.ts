@@ -1,12 +1,25 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import { ViewStateManager } from './stateManager';
 import { HomeViewProvider } from './homeViewProvider';
 import { ToolSearchViewProvider } from './toolSearchViewProvider';
 import { FeaturedToolsViewProvider } from './featuredToolsViewProvider';
 import { ToolSpecificationViewProvider } from './toolSpecificationViewProvider';
-import { copyCursorPrompt, openCursorPromptDoc, maybeEnsureCursorPromptInRules, ensureMcpConfigWithStoredKey, secretKeyName } from './utils';
+import { copyCursorPrompt, openCursorPromptDoc, maybeEnsureCursorPromptInRules, ensureMcpConfigWithStoredKey, secretKeyName, globalStateKey } from './utils';
 
 let stateManager: ViewStateManager;
+
+async function getExtensionVersion(context: vscode.ExtensionContext): Promise<string | undefined> {
+  try {
+    const packageJsonPath = path.join(context.extensionPath, 'package.json');
+    const packageJsonContent = await fs.readFile(packageJsonPath, 'utf8');
+    const packageJson = JSON.parse(packageJsonContent);
+    return packageJson.version;
+  } catch {
+    return undefined;
+  }
+}
 
 export async function activate(context: vscode.ExtensionContext) {
   stateManager = new ViewStateManager(context);
@@ -44,8 +57,31 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  await maybeEnsureCursorPromptInRules(context);
+  // Check if this is a new installation or update by comparing extension version
+  const currentVersion = await getExtensionVersion(context);
+  const storedVersion = context.globalState.get<string>(globalStateKey('extensionVersion'));
+  const isNewInstallOrUpdate = !storedVersion || storedVersion !== currentVersion;
+  
+  // Update stored version
+  if (currentVersion) {
+    await context.globalState.update(globalStateKey('extensionVersion'), currentVersion);
+  }
+
+  // Execute installation tasks immediately on activation
+  // Force replace rule files if this is a new installation or update
   await ensureMcpConfigWithStoredKey(context);
+  await maybeEnsureCursorPromptInRules(context, isNewInstallOrUpdate);
+
+  // Also listen for workspace folder changes to ensure rules are installed when workspace becomes available
+  const ensureRulesOnWorkspaceChange = async () => {
+    await maybeEnsureCursorPromptInRules(context, false);
+  };
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeWorkspaceFolders(async () => {
+      await ensureRulesOnWorkspaceChange();
+    })
+  );
 }
 
 export function deactivate() {
