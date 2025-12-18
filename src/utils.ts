@@ -31,6 +31,12 @@ export function globalStateKey(base: string) {
   return `${base}.${isCursorApp() ? 'cursor' : 'vscode'}`;
 }
 
+export function generateOAuthState(): string {
+  const schema = isCursorApp() ? 'cursor' : 'vscode';
+  const random = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  return `${schema}-${random}`;
+}
+
 export async function getStoredEmail(context: vscode.ExtensionContext) {
   const secretEmail = await context.secrets.get(secretKeyName('qverisEmail'));
   if (secretEmail) return secretEmail;

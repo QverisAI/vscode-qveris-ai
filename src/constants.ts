@@ -57,7 +57,7 @@ POST /tools/execute?tool_id={tool_id}
   },
   "success": true,
   "error_message": null,
-  "execution_time": 0.847
+  "elapsed_time_ms": 847
 }
 \`\`\`
 `;

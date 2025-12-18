@@ -44,11 +44,8 @@ export class HomeViewProvider extends BaseViewProvider implements vscode.Webview
 
     webviewView.webview.onDidReceiveMessage(async (message) => {
       switch (message.type) {
-        case 'login':
-          await this.handleLogin(this.context, this.stateManager, message.email, message.password);
-          break;
-        case 'register':
-          vscode.commands.executeCommand('vscode-qveris-ai.openWebsite');
+        case 'oauthLogin':
+          vscode.commands.executeCommand('vscode-qveris-ai.oauthLogin');
           break;
         case 'logout':
           await this.handleLogout(this.context, this.stateManager);
@@ -205,21 +202,14 @@ export class HomeViewProvider extends BaseViewProvider implements vscode.Webview
           </div>
         </div>
         <div id="login-section" class="card">
-          <div class="status" id="login-hint">Sign in to Qveris to generate and store your API key. No account? Click Register.</div>
+          <div class="status" id="login-hint">Sign in to Qveris to generate and store your API key.</div>
           <div class="row">
-            <input id="email" type="email" placeholder="Email" autocomplete="email" />
-          </div>
-          <div class="row">
-            <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
-          </div>
-          <div class="row">
-            <button id="login">Sign in</button>
-            <button id="register" class="secondary">Register</button>
+            <button id="oauth-login">Sign in with Browser</button>
           </div>
           <div class="status" id="status"></div>
         </div>
         <div class="help-section">
-          <p>You need to sign in to your Qveris account first. If you don't have an account, click Register to go to the Qveris website and create one. After successful login, the Qveris extension will automatically install the Qveris SDK MCP and configure the API key and Cursor rule for you.</p>
+          <p>You need to sign in to your Qveris account first. If you don't have an account, please visit <a href="https://qveris.ai" target="_blank">qveris.ai</a> to create one. After successful login, the Qveris extension will automatically install the Qveris SDK MCP and configure the API key and Cursor rule for you.</p>
           <p>You can type your requirements in the chat, such as "Help me create a Python test script to get real-time cryptocurrency prices". The Qveris SDK MCP will help you search for suitable tools and generate code to call those tools.</p>
           <p>In the extension sidebar, you can also try searching for Qveris tools directly and execute the tools you find.</p>
         </div>
@@ -255,15 +245,9 @@ export class HomeViewProvider extends BaseViewProvider implements vscode.Webview
             }
           };
 
-          document.getElementById('login').addEventListener('click', () => {
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            if (status) status.textContent = 'Logging in...';
-            vscode.postMessage({ type: 'login', email, password });
-          });
-
-          document.getElementById('register').addEventListener('click', () => {
-            vscode.postMessage({ type: 'register' });
+          document.getElementById('oauth-login').addEventListener('click', () => {
+            if (status) status.textContent = 'Opening browser for login...';
+            vscode.postMessage({ type: 'oauthLogin' });
           });
 
           document.getElementById('logout').addEventListener('click', () => {
@@ -288,9 +272,6 @@ export class HomeViewProvider extends BaseViewProvider implements vscode.Webview
                 // Save state to webview
                 vscode.setState({ loggedIn: false, email: null, maskedKey: '' });
               }
-            }
-            if (msg.type === 'loginProgress' && msg.status === 'starting') {
-              if (status) status.textContent = 'Logging in...';
             }
             if (msg.type === 'loginError') {
               if (status) {
