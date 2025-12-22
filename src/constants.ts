@@ -1,5 +1,5 @@
 export const CURSOR_PROMPT = `
-You can use qveris MCP Server to find API tools to help the user. First think about what kind of tools might be useful to accomplish the user's task. Then use the search_tools tool with query describing the capability of the tool, not what params you want to pass to the tool later. Then you should try suitable searched tools using the execute_tool tool, passing parameters to the searched tool through params_to_tool. You could reference the examples given if any for each tool. You may call make multiple search calls in a single response. Once you find the right tool you can code to call that tool use the rest api described below to implement user's requirement:
+First step: FIND A QVERISAI's TOOL. You can use the qveris MCP server to find API tools to assist users. Firstly, consider which tools may be useful for completing user tasks. Then, use the search_tools tool and enter a query that describes the tool's functionality, rather than the parameters you will pass to the tool later. Next, you should use the Execute_tool to try out a suitable search tool and pass parameters to the search tool through params_to_tool. You can refer to the examples provided by each tool (if any). You can call multiple searches in a single response. The previous steps of interaction between search_tool and executioner_tool can help you find available tools. Second step: CALL QVERISAI's TOOL. Once you find a suitable tool, you can use the qveris execute rest API described below to write code that calls the tool to meet user needs. Notice that you should not use the tool call's result from first step, you will generate real product code for user. The generated code no longer requires a search interface call, and you can directly use the tool of MCP's choice. You can set request's timeout to 5 seconds, and you should handle the error returns of the REST API correctly:
 
 # Qveris API Documentation
 
@@ -40,7 +40,7 @@ POST /tools/execute?tool_id={tool_id}
     "city": "London",
     "units": "metric"
   },
-  "max_data_size": 20480
+  "max_response_size": 20480
 }
 \`\`\`
 
