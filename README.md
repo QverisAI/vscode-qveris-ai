@@ -23,7 +23,7 @@ Qveris is an intelligent tool platform for developers, providing MCP servers wit
 3. Enter email/password and click **Sign in**. The extension will:
    - Login and get user information
    - List or create API Key and store it in VS Code Secrets
-   - Automatically install/verify `@qverisai/sdk`
+   - Automatically install/verify `@qverisai/mcp`
    - Write API Key to `~/.cursor/mcp.json` and workspace `.vscode/mcp.json` in the `qveris` configuration
 4. After login, you can directly use: copy Key, open website, logout, etc.
 
@@ -34,7 +34,7 @@ The extension will write/update in `~/.cursor/mcp.json` and current workspace `.
   "mcpServers": {
     "qveris": {
       "command": "npx",
-      "args": ["@qverisai/sdk"],
+      "args": ["@qverisai/mcp"],
       "env": {
         "QVERIS_API_KEY": "<your-api-key>"
       }

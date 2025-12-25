@@ -106,7 +106,7 @@ export async function writeMcpConfigFile(mcpPath: string, apiKey: string) {
 
   data.mcpServers.qveris = {
     command: existing.command || 'npx',
-    args: existing.args || ['@qverisai/sdk'],
+    args: existing.args || ['@qverisai/mcp'],
     env: {
       ...existingEnv,
       QVERIS_API_KEY: apiKey

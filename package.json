@@ -2,7 +2,7 @@
   "name": "qveris-ai",
   "displayName": "Qveris AI",
   "description": "The official extension of Qveris AI can assist you in searching and executing the AI tools you need from a vast array of options. You don't need to provide an ApiKey or pay for each tool individually, as Qveris AI handles all of this for you.",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "QverisAI",
   "license": "MIT",
   "repository": {
