@@ -37,6 +37,27 @@ export function generateOAuthState(): string {
   return `${schema}-${random}`;
 }
 
+export function generateSessionId(): string {
+  const schema = isCursorApp() ? 'cursor' : 'vscode';
+  const random = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  return `${schema}-${random}`;
+}
+
+export function generateSearchId(): string {
+  const schema = isCursorApp() ? 'cursor' : 'vscode';
+  const random = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  return `${schema}-${random}`;
+}
+
+export function isToolId(query: string): boolean {
+  if (!query || !query.trim()) return false;
+  const trimmed = query.trim();
+  // tool_id规则：不带空格，以"."分隔，能获取到至少4个不为空的item
+  if (trimmed.includes(' ')) return false;
+  const parts = trimmed.split('.');
+  return parts.length >= 4 && parts.every(part => part && part.trim().length > 0);
+}
+
 export async function getStoredEmail(context: vscode.ExtensionContext) {
   const secretEmail = await context.secrets.get(secretKeyName('qverisEmail'));
   if (secretEmail) return secretEmail;

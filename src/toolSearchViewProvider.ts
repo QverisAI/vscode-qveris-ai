@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import axios from 'axios';
 import { ViewStateManager } from './stateManager';
-import { getNonce, secretKeyName } from './utils';
+import { getNonce, secretKeyName, globalStateKey, isToolId, generateSearchId } from './utils';
+import { log } from './logger';
 
 // Tool Search View Provider
 export class ToolSearchViewProvider implements vscode.WebviewViewProvider {
@@ -13,6 +14,7 @@ export class ToolSearchViewProvider implements vscode.WebviewViewProvider {
   ) {}
 
   public resolveWebviewView(webviewView: vscode.WebviewView) {
+    log('Qveris: ToolSearchViewProvider.resolveWebviewView called');
     this.view = webviewView;
     webviewView.webview.options = {
       enableScripts: true,
@@ -20,22 +22,30 @@ export class ToolSearchViewProvider implements vscode.WebviewViewProvider {
     };
     
     webviewView.onDidChangeVisibility(() => {
+      log('Qveris: ToolSearchView visibility changed, visible: ' + webviewView.visible);
       if (webviewView.visible) {
         // Refresh state when view becomes visible
       }
     });
 
+    log('Qveris: Setting webview HTML');
     webviewView.webview.html = this.getHtml(webviewView.webview);
+    log('Qveris: Webview HTML set, registering message handler');
 
     webviewView.webview.onDidReceiveMessage(async (message) => {
+      log('Qveris: Received message from webview, type: ' + (message.type || 'unknown'));
       switch (message.type) {
         case 'search':
+          log('Qveris: Processing search message with query: ' + (message.query || 'empty'));
           await this.handleSearch(message.query);
           break;
         case 'selectTool':
+          log('Qveris: Processing selectTool message');
           // Broadcast tool selection to Tool Execution view
           await this.broadcastToolSelection(message.tool);
           break;
+        default:
+          log('Qveris: Unknown message type: ' + (message.type || 'undefined'));
       }
     });
   }
@@ -50,11 +60,15 @@ export class ToolSearchViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async handleSearch(query: string) {
+    log('Qveris: handleSearch called with query: ' + (query || 'empty'));
+    
     if (!this.view) {
+      log('Qveris: handleSearch - view is not available');
       return;
     }
 
     if (!query || !query.trim()) {
+      log('Qveris: handleSearch - query is empty');
       this.view.webview.postMessage({
         type: 'searchError',
         message: 'Please enter a search query.'
@@ -62,11 +76,22 @@ export class ToolSearchViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
-    const accessToken = await this.context.secrets.get(secretKeyName('qverisAccessToken'));
-    if (!accessToken) {
+    const apiKey = await this.context.secrets.get(secretKeyName('qverisApiKey'));
+    if (!apiKey) {
       this.view.webview.postMessage({
         type: 'searchError',
         message: 'Please sign in first to search tools.'
+      });
+      return;
+    }
+
+    // Get session_id from global state
+    const sessionId = this.context.globalState.get<string>(globalStateKey('sessionId'));
+    if (!sessionId) {
+      log('Qveris: session_id not found, this should not happen');
+      this.view.webview.postMessage({
+        type: 'searchError',
+        message: 'Session not initialized. Please reload the extension.'
       });
       return;
     }
@@ -76,30 +101,136 @@ export class ToolSearchViewProvider implements vscode.WebviewViewProvider {
     try {
       const config = vscode.workspace.getConfiguration('qverisAi');
       const baseUrl = (config.get<string>('backendUrl') || 'https://qveris.ai').replace(/\/+$/, '');
-      const searchUrl = `${baseUrl}/rpc/v1/auth/search`;
+      const trimmedQuery = query.trim();
+      
+      let searchResponse;
+      let searchId: string;
 
-      const searchResponse = await axios.post(
-        searchUrl,
-        { query: query.trim(), limit: 10 },
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
+      // Check if query is a tool_id
+      if (isToolId(trimmedQuery)) {
+        log('Qveris: Query is a tool_id, calling /tools/by-ids interface');
+        const byIdsUrl = `${baseUrl}/api/v1/tools/by-ids`;
+        searchId = generateSearchId();
+        
+        log('Qveris: Calling /tools/by-ids with tool_id: ' + trimmedQuery);
+        log('Qveris: By-ids URL: ' + byIdsUrl);
+        
+        searchResponse = await axios.post(
+          byIdsUrl,
+          {
+            tool_ids: [trimmedQuery],
+            session_id: sessionId
           },
-          timeout: 30000
-        }
-      );
-
-      if (searchResponse.data?.status === 'success') {
-        this.view.webview.postMessage({
-          type: 'searchSuccess',
-          data: searchResponse.data.data
-        });
+          {
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 30000
+          }
+        );
       } else {
-        throw new Error(searchResponse.data?.message || 'Search failed');
+        log('Qveris: Query is not a tool_id, calling /search interface');
+        const searchUrl = `${baseUrl}/api/v1/search`;
+        searchId = generateSearchId();
+        
+        log('Qveris: Starting search with query: ' + trimmedQuery);
+        log('Qveris: Search URL: ' + searchUrl);
+        
+        searchResponse = await axios.post(
+          searchUrl,
+          {
+            query: trimmedQuery,
+            limit: 10,
+            search_id: searchId,
+            session_id: sessionId
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 30000
+          }
+        );
       }
+
+      log('Qveris: Search response status: ' + searchResponse.status);
+      log('Qveris: Search response data: ' + JSON.stringify(searchResponse.data, null, 2));
+
+      // HTTP 200 means success, use response data directly
+      // Response format: { query: '...', total: 10, results: [...], search_id: '...' }
+      const searchData = searchResponse.data;
+      
+      if (!searchData || !Array.isArray(searchData.results)) {
+        const errorMsg = searchResponse.data?.message || 
+                       searchResponse.data?.error || 
+                       'Invalid search response format';
+        log('Qveris: Invalid search response: ' + errorMsg);
+        throw new Error(errorMsg);
+      }
+
+      // Store search_id from response (or use generated one if not present)
+      const responseSearchId = searchData.search_id || searchId;
+      if (responseSearchId) {
+        // Store the search_id for use in execute interface
+        await this.context.globalState.update(globalStateKey('lastSearchId'), responseSearchId);
+      }
+
+      // Send success message with search data
+      log('Qveris: Sending search success message with ' + searchData.results.length + ' results');
+      this.view.webview.postMessage({
+        type: 'searchSuccess',
+        data: searchData
+      });
     } catch (err: any) {
-      const message = err?.response?.data?.message || err?.message || 'Search failed';
+      log('Qveris: Search error occurred');
+      log('Qveris: Error type: ' + (err?.constructor?.name || 'unknown'));
+      log('Qveris: Error message: ' + (err?.message || 'unknown'));
+      
+      let message = 'Search failed';
+      
+      // Handle axios errors with response
+      if (err?.response) {
+        log('Qveris: Error response status: ' + err.response.status);
+        log('Qveris: Error response data: ' + JSON.stringify(err.response.data, null, 2));
+        
+        // Extract error message from response
+        const errorData = err.response.data;
+        message = errorData?.message || 
+                 errorData?.error || 
+                 errorData?.data?.message ||
+                 errorData?.detail ||
+                 `Request failed with status ${err.response.status}`;
+        
+        // Handle specific HTTP status codes
+        if (err.response.status === 401) {
+          message = 'Authentication failed. Please sign in again.';
+        } else if (err.response.status === 403) {
+          message = 'Access denied. Please check your permissions.';
+        } else if (err.response.status === 404) {
+          message = 'Search endpoint not found. Please check the backend URL configuration.';
+        } else if (err.response.status >= 500) {
+          message = 'Server error. Please try again later.';
+        }
+      } 
+      // Handle network errors (no response)
+      else if (err?.request) {
+        log('Qveris: Network error - request was sent but no response received');
+        message = 'Network error. Please check your internet connection.';
+      }
+      // Handle timeout errors
+      else if (err?.code === 'ECONNABORTED' || err?.message?.includes('timeout')) {
+        log('Qveris: Request timeout');
+        message = 'Request timeout. Please try again.';
+      }
+      // Handle other errors
+      else if (err?.message) {
+        message = err.message;
+      }
+      
+      log('Qveris: Final error message to display: ' + message);
+      
       this.view.webview.postMessage({
         type: 'searchError',
         message
@@ -166,7 +297,9 @@ export class ToolSearchViewProvider implements vscode.WebviewViewProvider {
           const searchResultsHeader = document.getElementById('search-results-header');
 
           const performSearch = () => {
+            console.log('Qveris: performSearch called from frontend');
             const query = searchInput?.value?.trim() || '';
+            console.log('Qveris: Frontend search query: ' + query);
             if (!query) {
               if (searchStatus) {
                 searchStatus.textContent = 'Please enter a search query.';
@@ -181,7 +314,9 @@ export class ToolSearchViewProvider implements vscode.WebviewViewProvider {
               searchStatus.style.display = 'block';
             }
             if (searchButton) searchButton.disabled = true;
+            console.log('Qveris: Frontend sending message: { type: "search", query: "' + query + '" }');
             vscode.postMessage({ type: 'search', query });
+            console.log('Qveris: Frontend message sent');
           };
 
           // Add event listeners after DOM is ready

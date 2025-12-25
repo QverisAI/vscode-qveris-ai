@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import axios from 'axios';
 import { ViewStateManager } from './stateManager';
-import { getNonce, secretKeyName } from './utils';
+import { getNonce, secretKeyName, globalStateKey } from './utils';
+import { log } from './logger';
 
 // Tool Specification View Provider  
 export class ToolSpecificationViewProvider implements vscode.WebviewViewProvider {
@@ -92,11 +93,23 @@ export class ToolSpecificationViewProvider implements vscode.WebviewViewProvider
   private async handleExecute(toolId: string, parameters: any) {
     if (!this.view) return;
 
-    const accessToken = await this.context.secrets.get(secretKeyName('qverisAccessToken'));
-    if (!accessToken) {
+    const apiKey = await this.context.secrets.get(secretKeyName('qverisApiKey'));
+    if (!apiKey) {
       this.view.webview.postMessage({
         type: 'executeError',
         message: 'Please sign in first to execute tools.'
+      });
+      return;
+    }
+
+    // Get session_id and search_id from global state
+    const sessionId = this.context.globalState.get<string>(globalStateKey('sessionId'));
+    const searchId = this.context.globalState.get<string>(globalStateKey('lastSearchId'));
+
+    if (!sessionId) {
+      this.view.webview.postMessage({
+        type: 'executeError',
+        message: 'Session not initialized. Please reload the extension.'
       });
       return;
     }
@@ -107,26 +120,44 @@ export class ToolSpecificationViewProvider implements vscode.WebviewViewProvider
       const config = vscode.workspace.getConfiguration('qverisAi');
       const baseUrl = (config.get<string>('backendUrl') || 'https://qveris.ai').replace(/\/+$/, '');
 
+      const requestBody: any = {
+        tool: toolId,
+        parameters: parameters || {},
+        session_id: sessionId
+      };
+
+      // Add search_id if available
+      if (searchId) {
+        requestBody.search_id = searchId;
+      }
+
+      log('Qveris: Executing tool: ' + toolId);
+      log('Qveris: Execute request body: ' + JSON.stringify(requestBody, null, 2));
+
       const executeResponse = await axios.post(
         `${baseUrl}/rpc/v1/auth/tools/execute?tool_id=${encodeURIComponent(toolId)}`,
-        {
-          tool: toolId,
-          parameters: parameters || {}
-        },
+        requestBody,
         {
           headers: {
-            'Authorization': `Bearer ${accessToken}`,
+            'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json'
           },
           timeout: 60000
         }
       );
 
+      log('Qveris: Execute response status: ' + executeResponse.status);
+      log('Qveris: Execute response data: ' + JSON.stringify(executeResponse.data, null, 2));
+
       this.view.webview.postMessage({
         type: 'executeSuccess',
         data: executeResponse.data
       });
     } catch (err: any) {
+      log('Qveris: Execute error: ' + (err?.message || 'unknown'));
+      if (err?.response) {
+        log('Qveris: Execute error response: ' + JSON.stringify(err.response.data, null, 2));
+      }
       const message = err?.response?.data?.message || err?.message || 'Execution failed';
       this.view.webview.postMessage({
         type: 'executeError',

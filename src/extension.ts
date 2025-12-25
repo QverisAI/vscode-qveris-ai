@@ -7,28 +7,11 @@ import { HomeViewProvider } from './homeViewProvider';
 import { ToolSearchViewProvider } from './toolSearchViewProvider';
 import { FeaturedToolsViewProvider } from './featuredToolsViewProvider';
 import { ToolSpecificationViewProvider } from './toolSpecificationViewProvider';
-import { copyCursorPrompt, openCursorPromptDoc, maybeEnsureCursorPromptInRules, ensureMcpConfigWithStoredKey, secretKeyName, globalStateKey, generateOAuthState, ensureMcpConfigWithApiKey } from './utils';
+import { copyCursorPrompt, openCursorPromptDoc, maybeEnsureCursorPromptInRules, ensureMcpConfigWithStoredKey, secretKeyName, globalStateKey, generateOAuthState, ensureMcpConfigWithApiKey, generateSessionId } from './utils';
+import { initializeLogger, log, isTestMode } from './logger';
 
 let stateManager: ViewStateManager;
 let outputChannel: vscode.OutputChannel;
-let isTestModeFlag: boolean = false;
-
-// Check if we're in test mode (development mode, not packaged)
-// In packaged mode, extensionMode is Production
-function isTestMode(): boolean {
-  return isTestModeFlag;
-}
-
-// Helper function to log to both console and output channel
-// Only logs in test mode
-function log(message: string) {
-  if (isTestMode()) {
-    console.log(message);
-    if (outputChannel) {
-      outputChannel.appendLine(message);
-    }
-  }
-}
 
 async function getExtensionVersion(context: vscode.ExtensionContext): Promise<string | undefined> {
   try {
@@ -42,13 +25,22 @@ async function getExtensionVersion(context: vscode.ExtensionContext): Promise<st
 }
 
 export async function activate(context: vscode.ExtensionContext) {
-  // Set test mode flag based on extension mode
-  // Development mode = test mode, Production mode = non-test mode
-  isTestModeFlag = context.extensionMode === vscode.ExtensionMode.Development;
+  // Initialize logger
+  initializeLogger(context);
   
-  // Create output channel for logging
+  // Create output channel for backward compatibility (used by showLogs command)
   outputChannel = vscode.window.createOutputChannel('Qveris AI');
   log('Qveris: Extension activating...');
+
+  // Generate and store session_id if not exists (generated once per activation)
+  let sessionId = context.globalState.get<string>(globalStateKey('sessionId'));
+  if (!sessionId) {
+    sessionId = generateSessionId();
+    await context.globalState.update(globalStateKey('sessionId'), sessionId);
+    log('Qveris: Generated new session_id: ' + sessionId);
+  } else {
+    log('Qveris: Using existing session_id: ' + sessionId);
+  }
 
   stateManager = new ViewStateManager(context);
 
