@@ -57,25 +57,16 @@ export class BaseViewProvider {
               return fullKeyResp.data.data.api_key;
             }
           } catch {
-            // ignore and fallback to create
+            // ignore and continue
           }
         }
       }
     } catch {
-      // ignore and create
+      // ignore and continue
     }
 
-    // Create a fresh key
-    const config = vscode.workspace.getConfiguration('qverisAi');
-    const requestedName = config.get<string>('apiKeyName') || 'vscode';
-    const name = `${requestedName}-${Date.now()}`;
-
-    const createResp = await axios.post(`${baseUrl}/rpc/v1/auth/api-keys/create`, { name }, { headers, timeout: 15000 });
-    if (createResp.data?.status === 'success' && createResp.data?.data?.api_key) {
-      return createResp.data.data.api_key;
-    }
-
-    throw new Error(createResp.data?.message || 'Unable to create API key');
+    // If no API key found, throw an error instead of creating a new one
+    throw new Error('No API key found. Please create an API key in your Qveris account and try again.');
   }
 
   protected async handleLogin(context: vscode.ExtensionContext, stateManager: ViewStateManager, email: string, password: string) {

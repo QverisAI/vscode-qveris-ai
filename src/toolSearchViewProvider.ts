@@ -259,6 +259,21 @@ export class ToolSearchViewProvider implements vscode.WebviewViewProvider {
         background: var(--vscode-list-activeSelectionBackground, var(--vscode-editor-selectionBackground));
         box-shadow: 0 0 0 1px var(--vscode-focusBorder);
       }
+      .tool-item.selected .tool-item-header { 
+        color: var(--vscode-list-activeSelectionForeground, var(--vscode-foreground)); 
+      }
+      .tool-item.selected .tool-item-description { 
+        color: var(--vscode-list-activeSelectionForeground, var(--vscode-descriptionForeground)); 
+        opacity: 0.9;
+      }
+      .tool-item.selected .tool-item-meta { 
+        color: var(--vscode-list-activeSelectionForeground, var(--vscode-descriptionForeground)); 
+        opacity: 0.8;
+      }
+      .tool-item.selected .tool-category { 
+        color: var(--vscode-list-activeSelectionForeground, var(--vscode-descriptionForeground)); 
+        opacity: 0.8;
+      }
       .tool-item-header { font-weight: 600; font-size: 14px; margin-bottom: 6px; color: var(--vscode-foreground); }
       .tool-item-description { font-size: 12px; color: var(--vscode-descriptionForeground); margin-bottom: 6px; }
       .tool-item-meta { font-size: 11px; color: var(--vscode-descriptionForeground); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

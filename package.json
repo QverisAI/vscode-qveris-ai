@@ -48,11 +48,6 @@
           "type": "webview"
         },
         {
-          "id": "qverisAi.featuredTools",
-          "name": "Featured Tools",
-          "type": "webview"
-        },
-        {
           "id": "qverisAi.toolSpecification",
           "name": "Tool Specification",
           "type": "webview"

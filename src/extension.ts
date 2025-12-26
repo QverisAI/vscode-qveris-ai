@@ -5,7 +5,6 @@ import axios from 'axios';
 import { ViewStateManager } from './stateManager';
 import { HomeViewProvider } from './homeViewProvider';
 import { ToolSearchViewProvider } from './toolSearchViewProvider';
-import { FeaturedToolsViewProvider } from './featuredToolsViewProvider';
 import { ToolSpecificationViewProvider } from './toolSpecificationViewProvider';
 import { copyCursorPrompt, openCursorPromptDoc, maybeEnsureCursorPromptInRules, ensureMcpConfigWithStoredKey, secretKeyName, globalStateKey, generateOAuthState, ensureMcpConfigWithApiKey, generateSessionId } from './utils';
 import { initializeLogger, log, isTestMode } from './logger';
@@ -46,7 +45,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
   const homeProvider = new HomeViewProvider(context, stateManager);
   const toolSearchProvider = new ToolSearchViewProvider(context, stateManager);
-  const featuredToolsProvider = new FeaturedToolsViewProvider(context, stateManager);
   const toolSpecificationProvider = new ToolSpecificationViewProvider(context, stateManager);
 
   log('Qveris: Registering URI Handler for OAuth callback');
@@ -101,7 +99,6 @@ export async function activate(context: vscode.ExtensionContext) {
     uriHandler,
     vscode.window.registerWebviewViewProvider('qverisAi.home', homeProvider),
     vscode.window.registerWebviewViewProvider('qverisAi.toolSearch', toolSearchProvider),
-    vscode.window.registerWebviewViewProvider('qverisAi.featuredTools', featuredToolsProvider),
     vscode.window.registerWebviewViewProvider('qverisAi.toolSpecification', toolSpecificationProvider),
     vscode.commands.registerCommand('vscode-qveris-ai.openWebsite', () => {
       vscode.env.openExternal(vscode.Uri.parse('https://qveris.ai/'));
@@ -163,9 +160,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
 // Get backend URL from config, or use default based on test mode
 function getBackendUrl(config?: vscode.WorkspaceConfiguration): string {  
-  if (isTestMode()) {
-    return 'http://localhost:3000';
-  }
+  //if (isTestMode()) {
+  //  return 'http://localhost:3000';
+  //}
   // Get config if not provided
   if (!config) {
     config = vscode.workspace.getConfiguration('qverisAi');
@@ -188,9 +185,8 @@ function getLoginUrl(config?: vscode.WorkspaceConfiguration): string {
 }
 
 async function initiateOAuthLogin(context: vscode.ExtensionContext) {
-  const config = vscode.workspace.getConfiguration('qverisAi');
-  const backendUrl = getBackendUrl(config).replace(/\/+$/, '');
-  const loginUrl = `${backendUrl}/login`;
+  // Always use the official website URL for login page, even in development mode
+  const loginUrl = 'https://qveris.ai/login';
   const state = generateOAuthState();
 
   // Store the state for CSRF protection
@@ -482,10 +478,10 @@ async function processOAuthToken(context: vscode.ExtensionContext, accessToken: 
                 log('Qveris: Error response status (using ID): ' + getKeyErrorById.response.status);
                 log('Qveris: Error response data (using ID): ' + JSON.stringify(getKeyErrorById.response.data, null, 2));
               }
-              // ignore and fallback to create
+              // ignore and continue
             }
           } else {
-            // ignore and fallback to create
+            // ignore and continue
           }
         }
       }
@@ -526,94 +522,13 @@ async function processOAuthToken(context: vscode.ExtensionContext, accessToken: 
       log('Qveris: Error response headers: ' + JSON.stringify(listError.response.headers, null, 2));
     }
     
-    // ignore and create
+    // ignore and continue
   }
 
-  // Create a fresh key if none found
+  // If no API key found, throw an error instead of creating a new one
   if (!apiKey) {
-    log('Qveris: No existing API key found, creating a new one...');
-    const config = vscode.workspace.getConfiguration('qverisAi');
-    const requestedName = config.get<string>('apiKeyName') || 'vscode';
-    const name = `${requestedName}-${Date.now()}`;
-    log('Qveris: Creating API key with name: ' + name);
-
-    try {
-      const createApiKeyUrl = `${baseUrl}/rpc/v1/auth/api-keys/create`;
-      log('Qveris: Sending create API key request...');
-      log('Qveris: Create API key endpoint URL: ' + createApiKeyUrl);
-      log('Qveris: Request method: POST');
-      log('Qveris: Request body: ' + JSON.stringify({ name }, null, 2));
-      log('Qveris: Request headers: ' + JSON.stringify({
-        Authorization: headers.Authorization ? `Bearer ${accessToken.substring(0, 20)}...` : 'missing',
-        'Content-Type': 'application/json'
-      }, null, 2));
-      log('Qveris: Authorization token length: ' + accessToken.length);
-      log('Qveris: Authorization token preview: ' + accessToken.substring(0, 50) + '...');
-      log('Qveris: Request timeout: 15000ms');
-      const createResp = await axios.post(createApiKeyUrl, { name }, { headers, timeout: 15000 });
-      log('Qveris: Create API key response status: ' + createResp.status);
-      log('Qveris: Create API key response status text: ' + createResp.statusText);
-      log('Qveris: Create API key response headers: ' + JSON.stringify(createResp.headers, null, 2));
-      log('Qveris: Create API key response data: ' + JSON.stringify(createResp.data, null, 2));
-      
-      if (createResp.data?.status === 'success' && createResp.data?.data?.api_key) {
-        apiKey = createResp.data.data.api_key;
-        log('Qveris: ✅ Successfully created new API key');
-      } else {
-        const errorMsg = createResp.data?.message || 'Unable to create API key';
-        log('Qveris: ❌ Create API key failed: ' + errorMsg);
-        log('Qveris: Full response: ' + JSON.stringify(createResp.data, null, 2));
-        throw new Error(errorMsg);
-      }
-    } catch (createError: any) {
-      log('Qveris: ❌ Exception while creating API key: ' + (createError?.message || createError));
-      log('Qveris: Error type: ' + (createError?.constructor?.name || 'unknown'));
-      if (createError?.stack) {
-        log('Qveris: Error stack: ' + createError.stack);
-      }
-      
-      // Log request details
-      if (createError?.config) {
-        log('Qveris: Failed request URL: ' + (createError.config.url || 'unknown'));
-        log('Qveris: Failed request method: ' + (createError.config.method || 'unknown'));
-        log('Qveris: Failed request baseURL: ' + (createError.config.baseURL || 'unknown'));
-        log('Qveris: Failed request data: ' + JSON.stringify(createError.config.data, null, 2));
-        log('Qveris: Failed request headers: ' + JSON.stringify({
-          ...createError.config.headers,
-          Authorization: createError.config.headers?.Authorization ? 
-            `Bearer ${createError.config.headers.Authorization.replace('Bearer ', '').substring(0, 20)}...` : 
-            'missing'
-        }, null, 2));
-        log('Qveris: Failed request timeout: ' + (createError.config.timeout || 'unknown'));
-      }
-      
-      if (createError?.request) {
-        log('Qveris: Request was sent but no response received');
-        log('Qveris: Request path: ' + (createError.request.path || 'unknown'));
-        log('Qveris: Request host: ' + (createError.request.host || 'unknown'));
-      }
-      
-      if (createError?.response) {
-        log('Qveris: Error response status: ' + createError.response.status);
-        log('Qveris: Error response status text: ' + createError.response.statusText);
-        log('Qveris: Error response data: ' + JSON.stringify(createError.response.data, null, 2));
-        log('Qveris: Error response headers: ' + JSON.stringify(createError.response.headers, null, 2));
-        
-        // Check if it's an authentication error
-        if (createError.response.status === 401 || createError.response.status === 403) {
-          const errorData = createError.response.data;
-          const errorMsg = errorData?.message || errorData?.error || 'Invalid token';
-          log('Qveris: Authentication error detected: ' + errorMsg);
-          throw new Error(errorMsg);
-        }
-      }
-      
-      throw createError;
-    }
-  }
-
-  if (!apiKey) {
-    throw new Error('Failed to obtain API key');
+    log('Qveris: ❌ No existing API key found. Please create an API key in your Qveris account first.');
+    throw new Error('No API key found. Please create an API key in your Qveris account and try again.');
   }
 
   // Store the credentials

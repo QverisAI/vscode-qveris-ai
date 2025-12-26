@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import axios from 'axios';
 import { ViewStateManager } from './stateManager';
-import { getNonce, secretKeyName, globalStateKey } from './utils';
+import { getNonce, secretKeyName, globalStateKey, maskKey } from './utils';
 import { log } from './logger';
 
 // Tool Specification View Provider  
@@ -116,10 +116,11 @@ export class ToolSpecificationViewProvider implements vscode.WebviewViewProvider
 
     this.view.webview.postMessage({ type: 'executeProgress', status: 'starting' });
 
-    try {
-      const config = vscode.workspace.getConfiguration('qverisAi');
-      const baseUrl = (config.get<string>('backendUrl') || 'https://qveris.ai').replace(/\/+$/, '');
+    const config = vscode.workspace.getConfiguration('qverisAi');
+    const baseUrl = (config.get<string>('backendUrl') || 'https://qveris.ai').replace(/\/+$/, '');
+    const executeUrl = `${baseUrl}/api/v1/tools/execute?tool_id=${encodeURIComponent(toolId)}`;
 
+    try {
       const requestBody: any = {
         tool: toolId,
         parameters: parameters || {},
@@ -130,12 +131,14 @@ export class ToolSpecificationViewProvider implements vscode.WebviewViewProvider
       if (searchId) {
         requestBody.search_id = searchId;
       }
-
+      
       log('Qveris: Executing tool: ' + toolId);
+      log('Qveris: Execute URL: ' + executeUrl);
+      log('Qveris: Execute API Key: ' + maskKey(apiKey));
       log('Qveris: Execute request body: ' + JSON.stringify(requestBody, null, 2));
 
       const executeResponse = await axios.post(
-        `${baseUrl}/rpc/v1/auth/tools/execute?tool_id=${encodeURIComponent(toolId)}`,
+        executeUrl,
         requestBody,
         {
           headers: {
@@ -155,7 +158,10 @@ export class ToolSpecificationViewProvider implements vscode.WebviewViewProvider
       });
     } catch (err: any) {
       log('Qveris: Execute error: ' + (err?.message || 'unknown'));
+      log('Qveris: Execute error URL: ' + executeUrl);
+      log('Qveris: Execute error API Key: ' + maskKey(apiKey));
       if (err?.response) {
+        log('Qveris: Execute error response status: ' + err.response.status);
         log('Qveris: Execute error response: ' + JSON.stringify(err.response.data, null, 2));
       }
       const message = err?.response?.data?.message || err?.message || 'Execution failed';

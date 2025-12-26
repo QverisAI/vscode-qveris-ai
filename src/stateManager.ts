@@ -37,7 +37,6 @@ export class ViewStateManager {
     const views = [
       "qverisAi.home",
       "qverisAi.toolSearch",
-      "qverisAi.featuredTools",
       "qverisAi.toolSpecification",
     ];
     // Note: We'll need to track view instances to broadcast
