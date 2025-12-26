@@ -106,8 +106,8 @@ export class HomeViewProvider extends BaseViewProvider implements vscode.Webview
     const nonce = getNonce();
     const styles = `
       :root { color-scheme: light dark; }
-      body { font-family: var(--vscode-font-family); padding: 12px; color: var(--vscode-foreground); }
-      .card { border: 1px solid var(--vscode-editorWidget-border); border-radius: 8px; padding: 12px; background: var(--vscode-editor-background); margin-bottom: 12px; }
+      body { font-family: var(--vscode-font-family); padding: 12px; color: var(--vscode-foreground); background: var(--vscode-sideBar-background, var(--vscode-editor-background)); }
+      .card { border: 1px solid var(--vscode-editorWidget-border); border-radius: 8px; padding: 12px; background: var(--vscode-list-background, var(--vscode-sideBar-background, var(--vscode-editor-background))); margin-bottom: 12px; }
       .row { display: flex; gap: 8px; margin-bottom: 8px; }
       input { width: 100%; padding: 6px; border-radius: 4px; border: 1px solid var(--vscode-input-border); background: var(--vscode-input-background); color: var(--vscode-input-foreground); }
       button { padding: 6px 10px; border: 1px solid var(--vscode-button-border); background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-radius: 4px; cursor: pointer; }

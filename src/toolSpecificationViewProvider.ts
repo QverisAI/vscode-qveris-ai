@@ -288,7 +288,7 @@ ${paramsDescription.split('\n').map((line: string) => `// ${line}`).join('\n')}
     const nonce = getNonce();
     const styles = `
       :root { color-scheme: light dark; }
-      body { font-family: var(--vscode-font-family); padding: 12px; color: var(--vscode-foreground); }
+      body { font-family: var(--vscode-font-family); padding: 12px; color: var(--vscode-foreground); background: var(--vscode-sideBar-background, var(--vscode-editor-background)); }
       .tool-item-header { font-weight: 600; font-size: 14px; margin-bottom: 6px; color: var(--vscode-foreground); }
       .tool-item-description { font-size: 12px; color: var(--vscode-descriptionForeground); margin-bottom: 6px; }
       input { width: 100%; padding: 6px; border-radius: 4px; border: 1px solid var(--vscode-input-border); background: var(--vscode-input-background); color: var(--vscode-input-foreground); }

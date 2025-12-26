@@ -244,14 +244,14 @@ export class ToolSearchViewProvider implements vscode.WebviewViewProvider {
     const nonce = getNonce();
     const styles = `
       :root { color-scheme: light dark; }
-      body { font-family: var(--vscode-font-family); padding: 12px; color: var(--vscode-foreground); }
+      body { font-family: var(--vscode-font-family); padding: 12px; color: var(--vscode-foreground); background: var(--vscode-sideBar-background, var(--vscode-editor-background)); }
       .row { display: flex; gap: 8px; margin-bottom: 8px; }
       input { width: 100%; padding: 6px; border-radius: 4px; border: 1px solid var(--vscode-input-border); background: var(--vscode-input-background); color: var(--vscode-input-foreground); }
       button { padding: 6px 10px; border: 1px solid var(--vscode-button-border); background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-radius: 4px; cursor: pointer; }
       button:disabled { opacity: 0.5; cursor: not-allowed; }
       .status { margin-top: 8px; font-size: 12px; color: var(--vscode-descriptionForeground); }
       .error { color: #f85149; }
-      .tool-item { border: 1px solid var(--vscode-editorWidget-border); border-radius: 6px; padding: 10px; margin-bottom: 8px; background: var(--vscode-editor-background); cursor: pointer; position: relative; transition: all 0.2s ease; }
+      .tool-item { border: 1px solid var(--vscode-editorWidget-border); border-radius: 6px; padding: 10px; margin-bottom: 8px; background: var(--vscode-list-background, var(--vscode-sideBar-background, var(--vscode-editor-background))); cursor: pointer; position: relative; transition: all 0.2s ease; }
       .tool-item:hover { border-color: var(--vscode-focusBorder); }
       .tool-item.selected { 
         border-color: var(--vscode-focusBorder); 
