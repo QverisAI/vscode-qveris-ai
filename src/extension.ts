@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as cp from 'child_process';
 import axios from 'axios';
 import { ViewStateManager } from './stateManager';
 import { HomeViewProvider } from './homeViewProvider';
@@ -11,6 +12,35 @@ import { initializeLogger, log, isTestMode } from './logger';
 
 let stateManager: ViewStateManager;
 let outputChannel: vscode.OutputChannel;
+
+/**
+ * Check if Node.js is available in the system
+ * @returns Promise<boolean> - true if Node.js is available, false otherwise
+ */
+async function checkNodeEnvironment(): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      // Try to execute 'node --version' command
+      cp.exec('node --version', { timeout: 5000 }, (error, stdout, stderr) => {
+        if (error) {
+          log('Qveris: Node.js check failed: ' + (error.message || error));
+          resolve(false);
+          return;
+        }
+        if (stdout) {
+          log('Qveris: Node.js version detected: ' + stdout.trim());
+          resolve(true);
+        } else {
+          log('Qveris: Node.js check returned no output');
+          resolve(false);
+        }
+      });
+    } catch (err: any) {
+      log('Qveris: Node.js check exception: ' + (err?.message || err));
+      resolve(false);
+    }
+  });
+}
 
 async function getExtensionVersion(context: vscode.ExtensionContext): Promise<string | undefined> {
   try {
@@ -30,6 +60,20 @@ export async function activate(context: vscode.ExtensionContext) {
   // Create output channel for backward compatibility (used by showLogs command)
   outputChannel = vscode.window.createOutputChannel('Qveris AI');
   log('Qveris: Extension activating...');
+
+  // Check Node.js environment
+  const hasNode = await checkNodeEnvironment();
+  if (!hasNode) {
+    log('Qveris: Node.js environment not detected');
+    const action = await vscode.window.showWarningMessage(
+      'Qveris AI: Node.js 环境未检测到。某些功能可能需要 Node.js 才能正常工作。请安装 Node.js。',
+      '打开 Node.js 官网',
+      '稍后提醒'
+    );
+    if (action === '打开 Node.js 官网') {
+      vscode.env.openExternal(vscode.Uri.parse('https://nodejs.org/'));
+    }
+  }
 
   // Generate and store session_id if not exists (generated once per activation)
   let sessionId = context.globalState.get<string>(globalStateKey('sessionId'));
@@ -147,22 +191,55 @@ export async function activate(context: vscode.ExtensionContext) {
   await maybeEnsureCursorPromptInRules(context, isNewInstallOrUpdate);
 
   // Also listen for workspace folder changes to ensure rules are installed when workspace becomes available
-  const ensureRulesOnWorkspaceChange = async () => {
-    await maybeEnsureCursorPromptInRules(context, false);
+  const ensureRulesOnWorkspaceChange = async (silent: boolean = false) => {
+    await maybeEnsureCursorPromptInRules(context, false, silent);
   };
 
+  // Check rules file on workspace folder changes (including when folders are opened)
   context.subscriptions.push(
-    vscode.workspace.onDidChangeWorkspaceFolders(async () => {
-      await ensureRulesOnWorkspaceChange();
+    vscode.workspace.onDidChangeWorkspaceFolders(async (event) => {
+      // Check rules for newly added folders
+      if (event.added.length > 0) {
+        log('Qveris: Workspace folders added, checking for qveris.mdc file...');
+        await ensureRulesOnWorkspaceChange(false); // Show message when folder is opened
+      }
+      // Also check when folders are removed (in case the last folder was removed and a new one added)
+      if (event.removed.length > 0 && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+        log('Qveris: Workspace folders changed, checking for qveris.mdc file...');
+        await ensureRulesOnWorkspaceChange(false);
+      }
     })
   );
+
+  // Set up periodic check for qveris.mdc file (only in Cursor)
+  const isCursor = require('./utils').isCursorApp();
+  if (isCursor) {
+    log('Qveris: Setting up periodic check for qveris.mdc file in Cursor...');
+    
+    // Check immediately if workspace is already available (silent to avoid duplicate messages)
+    if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+      await ensureRulesOnWorkspaceChange(true); // Silent for initial check
+    }
+
+    // Set up periodic check every hour (silent mode to avoid spam)
+    const checkInterval = 60 * 60 * 1000; // 1 hour
+    const periodicCheck = setInterval(async () => {
+      if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+        await ensureRulesOnWorkspaceChange(true); // Silent for periodic checks
+      }
+    }, checkInterval);
+
+    // Clean up interval on deactivation
+    context.subscriptions.push({
+      dispose: () => {
+        clearInterval(periodicCheck);
+      }
+    });
+  }
 }
 
-// Get backend URL from config, or use default based on test mode
+// Get backend URL from config, or use default
 function getBackendUrl(config?: vscode.WorkspaceConfiguration): string {  
-  //if (isTestMode()) {
-  //  return 'http://localhost:3000';
-  //}
   // Get config if not provided
   if (!config) {
     config = vscode.workspace.getConfiguration('qverisAi');
@@ -170,8 +247,10 @@ function getBackendUrl(config?: vscode.WorkspaceConfiguration): string {
   
   // First try to get from config
   const configUrl = config.get<string>('backendUrl');
+  
   if (configUrl) {
-    return configUrl;
+    // Remove trailing slashes for consistency
+    return configUrl.replace(/\/+$/, '');
   }
 
   // If no config, use default
@@ -185,8 +264,10 @@ function getLoginUrl(config?: vscode.WorkspaceConfiguration): string {
 }
 
 async function initiateOAuthLogin(context: vscode.ExtensionContext) {
-  // Always use the official website URL for login page, even in development mode
-  const loginUrl = 'https://qveris.ai/login';
+  // Use configured backend URL for login page
+  const config = vscode.workspace.getConfiguration('qverisAi');
+  const backendUrl = getBackendUrl(config);
+  const loginUrl = `${backendUrl}/login`;
   const state = generateOAuthState();
 
   // Store the state for CSRF protection
@@ -197,6 +278,7 @@ async function initiateOAuthLogin(context: vscode.ExtensionContext) {
   const scheme = isCursor ? 'cursor' : 'vscode';
   const callbackUrl = `${scheme}://QverisAI.qveris-ai/auth-callback`;
 
+  log('Qveris: backendUrl: ' + backendUrl);
   log('Qveris: Generated OAuth state: ' + state);
   log('Qveris: Expected callback URL: ' + callbackUrl);
 

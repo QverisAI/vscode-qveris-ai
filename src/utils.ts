@@ -212,7 +212,7 @@ function buildRulesFileContent(existing: string) {
   return ['---', 'description: Utilizing third-party APIs to retrieve and process data is applicable in various fields such as finance, economics, healthcare, sports, scientific research, and more', 'alwaysApply: false', '---', '', CURSOR_PROMPT, ''].join('\n');
 }
 
-export async function maybeEnsureCursorPromptInRules(context: vscode.ExtensionContext, forceReplace: boolean = false) {
+export async function maybeEnsureCursorPromptInRules(context: vscode.ExtensionContext, forceReplace: boolean = false, silent: boolean = false) {
   if (!isCursorApp()) return;
 
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -235,16 +235,20 @@ export async function maybeEnsureCursorPromptInRules(context: vscode.ExtensionCo
 
       await fs.writeFile(rulesPath, newContent, 'utf8');
       await context.globalState.update('qverisCursorPromptCopied', true);
-      if (forceReplace) {
-        vscode.window.showInformationMessage('Qveris MCP prompt updated in workspace rules file.');
-      } else {
-        vscode.window.showInformationMessage('Qveris MCP prompt written to this workspace rules file.');
+      if (!silent) {
+        if (forceReplace) {
+          vscode.window.showInformationMessage('Qveris MCP prompt updated in workspace rules file.');
+        } else {
+          vscode.window.showInformationMessage('Qveris MCP prompt written to this workspace rules file.');
+        }
       }
     } else {
       await context.globalState.update('qverisCursorPromptCopied', true);
     }
   } catch (error: any) {
-    vscode.window.showErrorMessage(`Failed to write Qveris prompt to workspace rules: ${error?.message || error}`);
+    if (!silent) {
+      vscode.window.showErrorMessage(`Failed to write Qveris prompt to workspace rules: ${error?.message || error}`);
+    }
   }
 }
 
