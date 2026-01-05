@@ -23,28 +23,44 @@ export function isCursorApp() {
   return !!process.env.CURSOR || (vscode.env.appName || '').toLowerCase().includes('cursor');
 }
 
+export function isTraeApp() {
+  return (vscode.env.appName || '').toLowerCase().includes('trae');
+}
+
+export function getIdeScheme(): 'vscode' | 'cursor' | 'trae' {
+  if (isTraeApp()) {
+    return 'trae';
+  }
+  if (isCursorApp()) {
+    return 'cursor';
+  }
+  return 'vscode';
+}
+
 export function secretKeyName(base: string) {
-  return `${base}.${isCursorApp() ? 'cursor' : 'vscode'}`;
+  const ideType = getIdeScheme();
+  return `${base}.${ideType}`;
 }
 
 export function globalStateKey(base: string) {
-  return `${base}.${isCursorApp() ? 'cursor' : 'vscode'}`;
+  const ideType = getIdeScheme();
+  return `${base}.${ideType}`;
 }
 
 export function generateOAuthState(): string {
-  const schema = isCursorApp() ? 'cursor' : 'vscode';
+  const schema = getIdeScheme();
   const random = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
   return `${schema}-${random}`;
 }
 
 export function generateSessionId(): string {
-  const schema = isCursorApp() ? 'cursor' : 'vscode';
+  const schema = getIdeScheme();
   const random = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
   return `${schema}-${random}`;
 }
 
 export function generateSearchId(): string {
-  const schema = isCursorApp() ? 'cursor' : 'vscode';
+  const schema = getIdeScheme();
   const random = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
   return `${schema}-${random}`;
 }
