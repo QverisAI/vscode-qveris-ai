@@ -97,14 +97,21 @@ export async function writeMcpConfigFile(mcpPath: string, apiKey: string) {
     data = {};
   }
 
-  if (!data.mcpServers || typeof data.mcpServers !== 'object') {
-    data.mcpServers = {};
+  // Determine if this is a Cursor config (in ~/.cursor) or VS Code config (in workspace .vscode)
+  // Cursor config is in ~/.cursor/mcp.json, VS Code config is in workspace/.vscode/mcp.json
+  const isCursorConfig = mcpPath.includes('.cursor') && !mcpPath.includes('.vscode');
+  const configKey = isCursorConfig ? 'mcpServers' : 'servers';
+
+  // Use appropriate key based on config type
+  if (!data[configKey] || typeof data[configKey] !== 'object') {
+    data[configKey] = {};
   }
 
-  const existing = data.mcpServers.qveris || {};
+  // Preserve all existing servers, only update qveris
+  const existing = data[configKey].qveris || {};
   const existingEnv = existing.env || {};
 
-  data.mcpServers.qveris = {
+  data[configKey].qveris = {
     command: existing.command || 'npx',
     args: existing.args || ['@qverisai/mcp'],
     env: {
@@ -122,7 +129,15 @@ export async function readApiKeyFromMcpConfigs(): Promise<string | undefined> {
     try {
       const raw = await fs.readFile(mcpPath, 'utf8');
       const data = JSON.parse(raw || '{}');
-      const key = data?.mcpServers?.qveris?.env?.QVERIS_API_KEY;
+      
+      // Determine if this is a Cursor config or VS Code config
+      // Cursor config is in ~/.cursor/mcp.json, VS Code config is in workspace/.vscode/mcp.json
+      const isCursorConfig = mcpPath.includes('.cursor') && !mcpPath.includes('.vscode');
+      const configKey = isCursorConfig ? 'mcpServers' : 'servers';
+      
+      // Try the appropriate key first, then fallback for backward compatibility
+      const key = data?.[configKey]?.qveris?.env?.QVERIS_API_KEY || 
+                  (isCursorConfig ? data?.servers?.qveris?.env?.QVERIS_API_KEY : data?.mcpServers?.qveris?.env?.QVERIS_API_KEY);
       if (typeof key === 'string' && key.trim()) {
         return key.trim();
       }
