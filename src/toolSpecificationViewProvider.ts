@@ -13,7 +13,7 @@ export class ToolSpecificationViewProvider implements vscode.WebviewViewProvider
     private readonly stateManager: ViewStateManager
   ) {}
 
-  public resolveWebviewView(webviewView: vscode.WebviewView) {
+  public async resolveWebviewView(webviewView: vscode.WebviewView) {
     this.view = webviewView;
     webviewView.webview.options = {
       enableScripts: true,
@@ -86,7 +86,32 @@ export class ToolSpecificationViewProvider implements vscode.WebviewViewProvider
           // Allow manual check via message
           checkAndUpdateTool();
           break;
+        case 'loginStateRequest':
+          await this.emitLoginState();
+          break;
       }
+    });
+
+    // Subscribe to login state changes
+    this.stateManager.subscribe(async (email, hasKey) => {
+      if (this.view) {
+        this.view.webview.postMessage({
+          type: 'loginState',
+          hasKey
+        });
+      }
+    });
+
+    // Emit initial login state immediately
+    await this.emitLoginState();
+  }
+
+  private async emitLoginState() {
+    if (!this.view) return;
+    const state = await this.stateManager.getLoginState();
+    this.view.webview.postMessage({
+      type: 'loginState',
+      hasKey: state.hasKey
     });
   }
 
@@ -296,6 +321,7 @@ ${paramsDescription.split('\n').map((line: string) => `// ${line}`).join('\n')}
       button:disabled { opacity: 0.5; cursor: not-allowed; }
       .status { font-size: 12px; color: var(--vscode-descriptionForeground); }
       .error { color: #f85149; }
+      .card { border: 1px solid var(--vscode-editorWidget-border); border-radius: 8px; padding: 12px; background: var(--vscode-list-background, var(--vscode-sideBar-background, var(--vscode-editor-background))); margin-bottom: 12px; }
       .param-group { margin-bottom: 12px; }
       .param-group.optional { display: none; }
       .param-group.optional.expanded { display: block; }
@@ -319,15 +345,49 @@ ${paramsDescription.split('\n').map((line: string) => `// ${line}`).join('\n')}
         <style>${styles}</style>
       </head>
       <body>
+        <div id="login-prompt" style="display:none;">
+          <div class="status error" style="margin-bottom: 8px;">Please sign in to use tool execution. Expand the Home view to sign in.</div>
+        </div>
         <div id="tool-execution-content"></div>
         <script nonce="${nonce}">
           const vscode = acquireVsCodeApi();
+          const loginPrompt = document.getElementById('login-prompt');
           const toolExecutionContent = document.getElementById('tool-execution-content');
           let currentToolId = null;
           let savedResult = null;
           let isExecuting = false;
           let hasExecutionResult = false;
           let isCursorIDE = false;
+          let isLoggedIn = false;
+
+          // Handle login state
+          const showLoginPrompt = () => {
+            if (loginPrompt) loginPrompt.style.display = 'block';
+            if (toolExecutionContent) toolExecutionContent.style.display = 'none';
+          };
+
+          const hideLoginPrompt = () => {
+            if (loginPrompt) loginPrompt.style.display = 'none';
+            if (toolExecutionContent) toolExecutionContent.style.display = 'block';
+          };
+          
+          // Disable execute button when not logged in
+          const disableExecuteButton = () => {
+            const executeButton = document.getElementById('execute-button');
+            if (executeButton) {
+              executeButton.disabled = true;
+            }
+          };
+          
+          const enableExecuteButton = () => {
+            const executeButton = document.getElementById('execute-button');
+            if (executeButton) {
+              executeButton.disabled = false;
+            }
+          };
+
+          // Request initial login state
+          vscode.postMessage({ type: 'loginStateRequest' });
           
           function escapeHtml(text) {
             if (!text) return '';
@@ -338,6 +398,11 @@ ${paramsDescription.split('\n').map((line: string) => `// ${line}`).join('\n')}
           
           function showToolExecution(tool) {
             if (!toolExecutionContent) return;
+
+            // Don't show tool execution if not logged in
+            if (!isLoggedIn) {
+              return;
+            }
 
             console.log('Tool Execution: showToolExecution called, tool:', tool ? (tool.tool_id || tool.tool) : null);
 
@@ -451,6 +516,12 @@ ${paramsDescription.split('\n').map((line: string) => `// ${line}`).join('\n')}
             
             toolExecutionContent.innerHTML = html;
             
+            // Set execute button state based on login status
+            const executeButton = document.getElementById('execute-button');
+            if (executeButton) {
+              executeButton.disabled = !isLoggedIn;
+            }
+            
             // Show Gen Code button if in Cursor IDE
             const genCodeButton = document.getElementById('gen-code-button');
             if (genCodeButton) {
@@ -499,6 +570,16 @@ ${paramsDescription.split('\n').map((line: string) => `// ${line}`).join('\n')}
             if (form) {
               form.addEventListener('submit', (e) => {
                 e.preventDefault();
+                // Check if logged in before executing
+                if (!isLoggedIn) {
+                  const resultDiv = document.getElementById('execution-result');
+                  if (resultDiv) {
+                    resultDiv.style.display = 'block';
+                    resultDiv.className = 'execution-result error';
+                    resultDiv.innerHTML = '<div class="status error">Please sign in first to execute tools. Expand the Home view to sign in.</div>';
+                  }
+                  return;
+                }
                 const formData = new FormData(form);
                 const parameters = {};
                 formData.forEach((value, key) => {
@@ -566,6 +647,24 @@ ${paramsDescription.split('\n').map((line: string) => `// ${line}`).join('\n')}
 
           window.addEventListener('message', (event) => {
             const msg = event.data;
+            if (msg.type === 'loginState') {
+              isLoggedIn = msg.hasKey || false;
+              if (isLoggedIn) {
+                hideLoginPrompt();
+                enableExecuteButton();
+              } else {
+                showLoginPrompt();
+                disableExecuteButton();
+                // Clear any tool execution content when logged out
+                if (toolExecutionContent) {
+                  toolExecutionContent.innerHTML = '';
+                }
+                currentToolId = null;
+                savedResult = null;
+                isExecuting = false;
+                hasExecutionResult = false;
+              }
+            }
             if (msg.type === 'cursorStatus') {
               isCursorIDE = msg.isCursor || false;
               // Update Gen Code button visibility if tool is already displayed

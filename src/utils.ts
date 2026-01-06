@@ -81,6 +81,10 @@ export async function getStoredEmail(context: vscode.ExtensionContext) {
 }
 
 export function getMcpConfigPaths() {
+  if (isTraeApp()) {
+    return [path.join(os.homedir(), '.trae-server', 'data', 'Machine', 'mcp.json')];
+  }
+  
   if (isCursorApp()) {
     return [path.join(os.homedir(), '.cursor', 'mcp.json')];
   }
@@ -95,7 +99,10 @@ export function getMcpConfigPaths() {
 }
 
 export function getAllKnownMcpPaths() {
-  const paths = [path.join(os.homedir(), '.cursor', 'mcp.json')];
+  const paths = [
+    path.join(os.homedir(), '.cursor', 'mcp.json'),
+    path.join(os.homedir(), '.trae-server', 'data', 'Machine', 'mcp.json')
+  ];
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (workspaceFolder) {
     paths.push(path.join(workspaceFolder.uri.fsPath, '.vscode', 'mcp.json'));
@@ -113,10 +120,12 @@ export async function writeMcpConfigFile(mcpPath: string, apiKey: string) {
     data = {};
   }
 
-  // Determine if this is a Cursor config (in ~/.cursor) or VS Code config (in workspace .vscode)
-  // Cursor config is in ~/.cursor/mcp.json, VS Code config is in workspace/.vscode/mcp.json
+  // Determine if this is a Cursor/Trae config (in ~/.cursor or ~/.trae-server) or VS Code config (in workspace .vscode)
+  // Cursor config is in ~/.cursor/mcp.json, Trae config is in ~/.trae-server/data/Machine/mcp.json
+  // VS Code config is in workspace/.vscode/mcp.json
   const isCursorConfig = mcpPath.includes('.cursor') && !mcpPath.includes('.vscode');
-  const configKey = isCursorConfig ? 'mcpServers' : 'servers';
+  const isTraeConfig = mcpPath.includes('.trae-server');
+  const configKey = (isCursorConfig || isTraeConfig) ? 'mcpServers' : 'servers';
 
   // Use appropriate key based on config type
   if (!data[configKey] || typeof data[configKey] !== 'object') {
@@ -146,15 +155,18 @@ export async function readApiKeyFromMcpConfigs(): Promise<string | undefined> {
       const raw = await fs.readFile(mcpPath, 'utf8');
       const data = JSON.parse(raw || '{}');
       
-      // Determine if this is a Cursor config or VS Code config
-      // Cursor config is in ~/.cursor/mcp.json, VS Code config is in workspace/.vscode/mcp.json
+      // Determine if this is a Cursor/Trae config or VS Code config
+      // Cursor config is in ~/.cursor/mcp.json, Trae config is in ~/.trae-server/data/Machine/mcp.json
+      // VS Code config is in workspace/.vscode/mcp.json
       const isCursorConfig = mcpPath.includes('.cursor') && !mcpPath.includes('.vscode');
-      const configKey = isCursorConfig ? 'mcpServers' : 'servers';
+      const isTraeConfig = mcpPath.includes('.trae-server');
+      const configKey = (isCursorConfig || isTraeConfig) ? 'mcpServers' : 'servers';
       
       // Try the appropriate key first, then fallback for backward compatibility
       const key = data?.[configKey]?.qveris?.env?.QVERIS_API_KEY || 
-                  (isCursorConfig ? data?.servers?.qveris?.env?.QVERIS_API_KEY : data?.mcpServers?.qveris?.env?.QVERIS_API_KEY);
-      if (typeof key === 'string' && key.trim()) {
+                  ((isCursorConfig || isTraeConfig) ? data?.servers?.qveris?.env?.QVERIS_API_KEY : data?.mcpServers?.qveris?.env?.QVERIS_API_KEY);
+      // Ignore placeholder values that indicate user needs to login
+      if (typeof key === 'string' && key.trim() && key.trim() !== 'LOGIN_TO_FETCH_APIKEY') {
         return key.trim();
       }
     } catch {
@@ -200,6 +212,46 @@ export async function ensureMcpConfigWithApiKey(apiKey: string) {
     const [first] = failed;
     vscode.window.showErrorMessage(`Failed to update Qveris MCP config at ${failed.map(f => f.mcpPath).join(', ')}: ${first?.error?.message || first?.error}`);
   }
+}
+
+export async function clearQverisApiKeyFromMcpConfigs(): Promise<string[]> {
+  const mcpPaths = getAllKnownMcpPaths();
+  const clearedPaths: string[] = [];
+  const placeholderValue = 'LOGIN_TO_FETCH_APIKEY';
+
+  for (const mcpPath of mcpPaths) {
+    try {
+      // Check if file exists
+      await fs.access(mcpPath);
+      
+      const raw = await fs.readFile(mcpPath, 'utf8');
+      const data = JSON.parse(raw || '{}');
+      
+      // Determine if this is a Cursor/Trae config or VS Code config
+      const isCursorConfig = mcpPath.includes('.cursor') && !mcpPath.includes('.vscode');
+      const isTraeConfig = mcpPath.includes('.trae-server');
+      const configKey = (isCursorConfig || isTraeConfig) ? 'mcpServers' : 'servers';
+      
+      // Check if qveris exists in the config
+      if (data[configKey] && data[configKey].qveris) {
+        // Set API key to placeholder value instead of deleting it
+        if (!data[configKey].qveris.env) {
+          data[configKey].qveris.env = {};
+        }
+        data[configKey].qveris.env.QVERIS_API_KEY = placeholderValue;
+        
+        // Write back the updated config
+        await fs.writeFile(mcpPath, JSON.stringify(data, null, 2), 'utf8');
+        clearedPaths.push(mcpPath);
+      }
+    } catch (error: any) {
+      // If file doesn't exist or can't be read, skip it
+      // This is expected for some paths that may not exist
+      continue;
+    }
+  }
+
+  return clearedPaths;
 }
 
 export async function copyCursorPrompt(context: vscode.ExtensionContext, markCopied: boolean) {
@@ -275,6 +327,44 @@ export async function maybeEnsureCursorPromptInRules(context: vscode.ExtensionCo
       }
     } else {
       await context.globalState.update('qverisCursorPromptCopied', true);
+    }
+  } catch (error: any) {
+    if (!silent) {
+      vscode.window.showErrorMessage(`Failed to write Qveris prompt to workspace rules: ${error?.message || error}`);
+    }
+  }
+}
+
+export async function maybeEnsureTraePromptInRules(context: vscode.ExtensionContext, forceReplace: boolean = false, silent: boolean = false) {
+  if (!isTraeApp()) return;
+
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+  if (!workspaceFolder) return;
+
+  const workspaceRoot = workspaceFolder.uri.fsPath;
+  const rulesPath = path.join(workspaceRoot, '.trae', 'rules', 'qveris.md');
+
+  try {
+    const existing = await fs.readFile(rulesPath, 'utf8').catch(() => '');
+    
+    // If forceReplace is true or file doesn't contain the prompt, write/update it
+    if (forceReplace || !existing.includes(CURSOR_PROMPT)) {
+      const dir = path.dirname(rulesPath);
+      await fs.mkdir(dir, { recursive: true });
+
+      const newContent = buildRulesFileContent(existing);
+
+      await fs.writeFile(rulesPath, newContent, 'utf8');
+      await context.globalState.update('qverisTraePromptCopied', true);
+      if (!silent) {
+        if (forceReplace) {
+          vscode.window.showInformationMessage('Qveris MCP prompt updated in workspace rules file.');
+        } else {
+          vscode.window.showInformationMessage('Qveris MCP prompt written to this workspace rules file.');
+        }
+      }
+    } else {
+      await context.globalState.update('qverisTraePromptCopied', true);
     }
   } catch (error: any) {
     if (!silent) {

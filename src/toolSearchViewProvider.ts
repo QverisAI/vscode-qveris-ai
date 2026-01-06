@@ -21,10 +21,11 @@ export class ToolSearchViewProvider implements vscode.WebviewViewProvider {
       localResourceRoots: [this.context.extensionUri]
     };
     
-    webviewView.onDidChangeVisibility(() => {
+    webviewView.onDidChangeVisibility(async () => {
       log('Qveris: ToolSearchView visibility changed, visible: ' + webviewView.visible);
       if (webviewView.visible) {
-        // Refresh state when view becomes visible
+        // Refresh login state when view becomes visible
+        await this.emitLoginState();
       }
     });
 
@@ -44,9 +45,34 @@ export class ToolSearchViewProvider implements vscode.WebviewViewProvider {
           // Broadcast tool selection to Tool Execution view
           await this.broadcastToolSelection(message.tool);
           break;
+        case 'loginStateRequest':
+          await this.emitLoginState();
+          break;
         default:
           log('Qveris: Unknown message type: ' + (message.type || 'undefined'));
       }
+    });
+
+    // Subscribe to login state changes
+    this.stateManager.subscribe(async (email, hasKey) => {
+      if (this.view) {
+        this.view.webview.postMessage({
+          type: 'loginState',
+          hasKey
+        });
+      }
+    });
+
+    // Emit initial login state
+    this.emitLoginState();
+  }
+
+  private async emitLoginState() {
+    if (!this.view) return;
+    const state = await this.stateManager.getLoginState();
+    this.view.webview.postMessage({
+      type: 'loginState',
+      hasKey: state.hasKey
     });
   }
 
@@ -245,6 +271,7 @@ export class ToolSearchViewProvider implements vscode.WebviewViewProvider {
     const styles = `
       :root { color-scheme: light dark; }
       body { font-family: var(--vscode-font-family); padding: 12px; color: var(--vscode-foreground); background: var(--vscode-sideBar-background, var(--vscode-editor-background)); }
+      .card { border: 1px solid var(--vscode-editorWidget-border); border-radius: 8px; padding: 12px; background: var(--vscode-list-background, var(--vscode-sideBar-background, var(--vscode-editor-background))); margin-bottom: 12px; }
       .row { display: flex; gap: 8px; margin-bottom: 8px; }
       input { width: 100%; padding: 6px; border-radius: 4px; border: 1px solid var(--vscode-input-border); background: var(--vscode-input-background); color: var(--vscode-input-foreground); }
       button { padding: 6px 10px; border: 1px solid var(--vscode-button-border); background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-radius: 4px; cursor: pointer; }
@@ -293,17 +320,24 @@ export class ToolSearchViewProvider implements vscode.WebviewViewProvider {
         <style>${styles}</style>
       </head>
       <body>
-        <div class="row">
-          <input id="search-input" type="text" placeholder="Search tools..." style="flex: 1;" />
-          <button id="search-button" type="button">Search</button>
+        <div id="login-prompt" style="display:none;">
+          <div class="status error" style="margin-bottom: 8px;">Please sign in to use tool search. Expand the Home view to sign in.</div>
         </div>
-        <div class="status" id="search-status" style="display:none;"></div>
-        <div id="tool-list-section" style="display:none;">
-          <div class="status" id="search-results-header" style="margin-top: 12px;"></div>
-          <div id="tool-list"></div>
+        <div id="search-section">
+          <div class="row">
+            <input id="search-input" type="text" placeholder="Search tools..." style="flex: 1;" />
+            <button id="search-button" type="button">Search</button>
+          </div>
+          <div class="status" id="search-status" style="display:none;"></div>
+          <div id="tool-list-section" style="display:none;">
+            <div class="status" id="search-results-header" style="margin-top: 12px;"></div>
+            <div id="tool-list"></div>
+          </div>
         </div>
         <script nonce="${nonce}">
           const vscode = acquireVsCodeApi();
+          const loginPrompt = document.getElementById('login-prompt');
+          const searchSection = document.getElementById('search-section');
           const searchInput = document.getElementById('search-input');
           const searchButton = document.getElementById('search-button');
           const searchStatus = document.getElementById('search-status');
@@ -311,8 +345,38 @@ export class ToolSearchViewProvider implements vscode.WebviewViewProvider {
           const toolList = document.getElementById('tool-list');
           const searchResultsHeader = document.getElementById('search-results-header');
 
+          // Handle login state
+          const showLoginPrompt = () => {
+            if (loginPrompt) loginPrompt.style.display = 'block';
+            if (searchSection) searchSection.style.display = 'block';
+            // Disable search when not logged in
+            if (searchButton) searchButton.disabled = true;
+            if (searchInput) searchInput.disabled = true;
+          };
+
+          const hideLoginPrompt = () => {
+            if (loginPrompt) loginPrompt.style.display = 'none';
+            if (searchSection) searchSection.style.display = 'block';
+            // Enable search when logged in
+            if (searchButton) searchButton.disabled = false;
+            if (searchInput) searchInput.disabled = false;
+          };
+
+          // Request initial login state
+          vscode.postMessage({ type: 'loginStateRequest' });
+
           const performSearch = () => {
             console.log('Qveris: performSearch called from frontend');
+            // Check if logged in before performing search
+            const currentState = vscode.getState() || {};
+            if (!currentState.isLoggedIn) {
+              if (searchStatus) {
+                searchStatus.textContent = 'Please sign in first to search tools. Expand the Home view to sign in.';
+                searchStatus.className = 'status error';
+                searchStatus.style.display = 'block';
+              }
+              return;
+            }
             const query = searchInput?.value?.trim() || '';
             console.log('Qveris: Frontend search query: ' + query);
             if (!query) {
@@ -444,6 +508,10 @@ export class ToolSearchViewProvider implements vscode.WebviewViewProvider {
 
           // Restore state from webview (after renderToolList is defined)
           const savedState = vscode.getState();
+          // Initialize button state based on saved login state
+          if (savedState && savedState.isLoggedIn === false) {
+            showLoginPrompt();
+          }
           if (savedState && savedState.searchResults) {
             if (savedState.lastQuery && searchInput) {
               searchInput.value = savedState.lastQuery;
@@ -470,6 +538,16 @@ export class ToolSearchViewProvider implements vscode.WebviewViewProvider {
 
           window.addEventListener('message', (event) => {
             const msg = event.data;
+            if (msg.type === 'loginState') {
+              // Save login state to webview state
+              const currentState = vscode.getState() || {};
+              vscode.setState({ ...currentState, isLoggedIn: msg.hasKey || false });
+              if (msg.hasKey) {
+                hideLoginPrompt();
+              } else {
+                showLoginPrompt();
+              }
+            }
             if (msg.type === 'searchProgress' && msg.status === 'starting') {
               if (searchStatus) {
                 searchStatus.textContent = 'Searching...';

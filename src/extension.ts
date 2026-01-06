@@ -7,7 +7,7 @@ import { ViewStateManager } from './stateManager';
 import { HomeViewProvider } from './homeViewProvider';
 import { ToolSearchViewProvider } from './toolSearchViewProvider';
 import { ToolSpecificationViewProvider } from './toolSpecificationViewProvider';
-import { copyCursorPrompt, openCursorPromptDoc, maybeEnsureCursorPromptInRules, ensureMcpConfigWithStoredKey, secretKeyName, globalStateKey, generateOAuthState, ensureMcpConfigWithApiKey, generateSessionId, getIdeScheme, isCursorApp } from './utils';
+import { copyCursorPrompt, openCursorPromptDoc, maybeEnsureCursorPromptInRules, maybeEnsureTraePromptInRules, ensureMcpConfigWithStoredKey, secretKeyName, globalStateKey, generateOAuthState, ensureMcpConfigWithApiKey, generateSessionId, getIdeScheme, isCursorApp, isTraeApp } from './utils';
 import { initializeLogger, log, isTestMode } from './logger';
 
 let stateManager: ViewStateManager;
@@ -189,10 +189,12 @@ export async function activate(context: vscode.ExtensionContext) {
   // Force replace rule files if this is a new installation or update
   await ensureMcpConfigWithStoredKey(context);
   await maybeEnsureCursorPromptInRules(context, isNewInstallOrUpdate);
+  await maybeEnsureTraePromptInRules(context, isNewInstallOrUpdate);
 
   // Also listen for workspace folder changes to ensure rules are installed when workspace becomes available
   const ensureRulesOnWorkspaceChange = async (silent: boolean = false) => {
     await maybeEnsureCursorPromptInRules(context, false, silent);
+    await maybeEnsureTraePromptInRules(context, false, silent);
   };
 
   // Check rules file on workspace folder changes (including when folders are opened)
@@ -200,21 +202,22 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.workspace.onDidChangeWorkspaceFolders(async (event) => {
       // Check rules for newly added folders
       if (event.added.length > 0) {
-        log('Qveris: Workspace folders added, checking for qveris.mdc file...');
+        log('Qveris: Workspace folders added, checking for rule files...');
         await ensureRulesOnWorkspaceChange(false); // Show message when folder is opened
       }
       // Also check when folders are removed (in case the last folder was removed and a new one added)
       if (event.removed.length > 0 && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
-        log('Qveris: Workspace folders changed, checking for qveris.mdc file...');
+        log('Qveris: Workspace folders changed, checking for rule files...');
         await ensureRulesOnWorkspaceChange(false);
       }
     })
   );
 
-  // Set up periodic check for qveris.mdc file (only in Cursor)
+  // Set up periodic check for rule files (only in Cursor or Trae)
   const isCursor = isCursorApp();
-  if (isCursor) {
-    log('Qveris: Setting up periodic check for qveris.mdc file in Cursor...');
+  const isTrae = isTraeApp();
+  if (isCursor || isTrae) {
+    log(`Qveris: Setting up periodic check for rule files in ${isTrae ? 'Trae' : 'Cursor'}...`);
     
     // Check immediately if workspace is already available (silent to avoid duplicate messages)
     if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {

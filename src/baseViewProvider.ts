@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import axios from 'axios';
 import { LoginResult } from './types';
 import { ViewStateManager } from './stateManager';
-import { secretKeyName, globalStateKey, ensureMcpConfigWithApiKey } from './utils';
+import { secretKeyName, globalStateKey, ensureMcpConfigWithApiKey, clearQverisApiKeyFromMcpConfigs } from './utils';
 
 // Base class for shared login functionality
 export class BaseViewProvider {
@@ -98,8 +98,16 @@ export class BaseViewProvider {
     await context.secrets.delete(secretKeyName('qverisEmail'));
     await context.globalState.update(globalStateKey('qverisEmail'), undefined);
 
+    // Clear API key from MCP config files (keep the configuration structure)
+    const clearedPaths = await clearQverisApiKeyFromMcpConfigs();
+    
     await stateManager.notifyLoginStateChanged();
-    vscode.window.showInformationMessage('Logged out of Qveris.');
+    
+    if (clearedPaths.length > 0) {
+      vscode.window.showInformationMessage(`Logged out of Qveris. Removed API key from Qveris MCP configuration files. You should sign in again to use Qveris tools.`);
+    } else {
+      vscode.window.showInformationMessage('Logged out of Qveris.');
+    }
   }
 }
 
