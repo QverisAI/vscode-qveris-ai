@@ -217,23 +217,23 @@ export class ToolSpecificationViewProvider implements vscode.WebviewViewProvider
         }).join('\n');
       }
 
-      const prompt = `根据 qveris api 接口文档生成调用工具 "${toolName}" (tool_id: ${toolId}) 的代码实现。
+      const prompt = `Generate code implementation to call tool "${toolName}" (tool_id: ${toolId}) based on the Qveris API documentation.
 
-工具描述：${toolDescription}
+Tool Description: ${toolDescription}
 
-参数：
+Parameters:
 ${paramsDescription}
 
-示例参数：
+Example Parameters:
 ${JSON.stringify(sampleParams, null, 2)}
 
-请生成完整的代码实现，包括：
-1. 导入必要的依赖
-2. 调用 Qveris API 执行工具的代码
-3. 错误处理
-4. 使用示例参数作为默认值
+Please generate a complete code implementation, including:
+1. Import necessary dependencies
+2. Code to call Qveris API to execute the tool
+3. Error handling
+4. Use example parameters as default values
 
-请参考 @qveris_ai_api 规则中的 API 文档。`;
+Please refer to the API documentation in the @qveris_ai_api rule.`;
 
       // Create a new document with the prompt and tool information
       const docContent = `// Tool: ${toolName} (${toolId})

@@ -66,11 +66,11 @@ export async function activate(context: vscode.ExtensionContext) {
   if (!hasNode) {
     log('Qveris: Node.js environment not detected');
     const action = await vscode.window.showWarningMessage(
-      'Qveris AI: Node.js 环境未检测到。某些功能可能需要 Node.js 才能正常工作。请安装 Node.js。',
-      '打开 Node.js 官网',
-      '稍后提醒'
+      'Qveris AI: Node.js environment not detected. Some features may require Node.js to work properly. Please install Node.js.',
+      'Open Node.js Website',
+      'Remind Me Later'
     );
-    if (action === '打开 Node.js 官网') {
+    if (action === 'Open Node.js Website') {
       vscode.env.openExternal(vscode.Uri.parse('https://nodejs.org/'));
     }
   }
