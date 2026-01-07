@@ -50,10 +50,6 @@ export class ToolSpecificationViewProvider implements vscode.WebviewViewProvider
       }
     });
 
-    // Send Cursor IDE status to webview immediately
-    const isCursor = !!process.env.CURSOR || (vscode.env.appName || '').toLowerCase().includes('cursor');
-    webviewView.webview.postMessage({ type: 'cursorStatus', isCursor });
-    
     // Check for selected tool on initialization
     setTimeout(() => {
       checkAndUpdateTool();
@@ -78,9 +74,6 @@ export class ToolSpecificationViewProvider implements vscode.WebviewViewProvider
       switch (message.type) {
         case 'execute':
           await this.handleExecute(message.toolId, message.parameters);
-          break;
-        case 'genCode':
-          await this.handleGenCode(message.tool);
           break;
         case 'checkTool':
           // Allow manual check via message
@@ -357,7 +350,6 @@ ${paramsDescription.split('\n').map((line: string) => `// ${line}`).join('\n')}
           let savedResult = null;
           let isExecuting = false;
           let hasExecutionResult = false;
-          let isCursorIDE = false;
           let isLoggedIn = false;
 
           // Handle login state
@@ -504,9 +496,8 @@ ${paramsDescription.split('\n').map((line: string) => `// ${line}`).join('\n')}
                       </div>
                       \${optionalParams.map(p => renderParamField(p, sampleParams[p.key], true)).join('')}
                     \` : ''}
-                    <div style="margin-top: 12px; display: flex; gap: 8px;">
+                    <div style="margin-top: 12px;">
                       <button type="submit" id="execute-button">Execute</button>
-                      <button type="button" id="gen-code-button">Gen Code</button>
                     </div>
                   </form>
                   <div id="execution-result" style="display:none;"></div>
@@ -520,21 +511,6 @@ ${paramsDescription.split('\n').map((line: string) => `// ${line}`).join('\n')}
             const executeButton = document.getElementById('execute-button');
             if (executeButton) {
               executeButton.disabled = !isLoggedIn;
-            }
-            
-            // Show Gen Code button if in Cursor IDE
-            const genCodeButton = document.getElementById('gen-code-button');
-            if (genCodeButton) {
-              // Always set up the click handler
-              genCodeButton.onclick = () => {
-                vscode.postMessage({
-                  type: 'genCode',
-                  tool: tool
-                });
-              };
-              // Show button by default, will be hidden if not Cursor IDE when cursorStatus message arrives
-              // This ensures the button is visible even if cursorStatus hasn't arrived yet
-              genCodeButton.style.display = 'inline-block';
             }
             
             // Restore saved result if exists
@@ -663,14 +639,6 @@ ${paramsDescription.split('\n').map((line: string) => `// ${line}`).join('\n')}
                 savedResult = null;
                 isExecuting = false;
                 hasExecutionResult = false;
-              }
-            }
-            if (msg.type === 'cursorStatus') {
-              isCursorIDE = msg.isCursor || false;
-              // Update Gen Code button visibility if tool is already displayed
-              const genCodeButton = document.getElementById('gen-code-button');
-              if (genCodeButton) {
-                genCodeButton.style.display = isCursorIDE ? 'inline-block' : 'none';
               }
             }
             if (msg.type === 'toolSelected') {

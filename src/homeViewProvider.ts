@@ -66,6 +66,11 @@ export class HomeViewProvider extends BaseViewProvider implements vscode.Webview
         if (hasKey) {
           const apiKey = await this.context.secrets.get(secretKeyName('qverisApiKey'));
           maskedKey = maskKey(apiKey || '');
+          // Collapse the view when logged in
+          this.view.show(false);
+        } else {
+          // Expand the view when logged out
+          this.view.show(true);
         }
         this.view.webview.postMessage({
           type: 'loginState',

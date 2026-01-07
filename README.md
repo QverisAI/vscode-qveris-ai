@@ -1,6 +1,6 @@
-# Qveris AI VS Code / Cursor Extension
+# Qveris AI VS Code/Cursor/Trae Extension
 
-Official extension for [Qveris.ai](https://qveris.ai). Sign in once, get your API key securely stored, auto-install the Qveris MCP SDK, and run Qveris tools directly from VS Code or Cursor.
+Official extension for [Qveris.ai](https://qveris.ai). Sign in once, get your API key securely stored, auto-install the Qveris MCP SDK, and run Qveris tools directly from VS Code, Cursor or Trae.
 
 ## About Qveris
 Qveris is an intelligent tool platform for developers, providing MCP servers with rich tool search/execution capabilities, helping you complete information queries, automation operations, and workflow orchestration within your editor.
@@ -13,7 +13,7 @@ Qveris is an intelligent tool platform for developers, providing MCP servers wit
 - **Search And Execute**: Search and run Qveris AI tools directly.
 
 ## Requirements
-- VS Code 1.85+ or Cursor
+- VS Code 1.85+, Cursor or Trae
 - Node.js 18+
 - A Qveris.ai account (email + password)
 
