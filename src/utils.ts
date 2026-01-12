@@ -80,9 +80,24 @@ export async function getStoredEmail(context: vscode.ExtensionContext) {
   return context.globalState.get<string>(globalStateKey('qverisEmail'));
 }
 
+function getTraeMcpConfigPath(): string {
+  const platform = os.platform();
+  if (platform === 'win32') {
+    // Windows: %APPDATA%\Trae\User\mcp.json
+    const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+    return path.join(appData, 'Trae', 'User', 'mcp.json');
+  } else if (platform === 'darwin') {
+    // macOS: ~/Library/Application Support/Trae/User/mcp.json
+    return path.join(os.homedir(), 'Library', 'Application Support', 'Trae', 'User', 'mcp.json');
+  } else {
+    // Linux: ~/.trae-server/data/Machine/mcp.json
+    return path.join(os.homedir(), '.trae-server', 'data', 'Machine', 'mcp.json');
+  }
+}
+
 export function getMcpConfigPaths() {
   if (isTraeApp()) {
-    return [path.join(os.homedir(), '.trae-server', 'data', 'Machine', 'mcp.json')];
+    return [getTraeMcpConfigPath()];
   }
   
   if (isCursorApp()) {
@@ -101,7 +116,7 @@ export function getMcpConfigPaths() {
 export function getAllKnownMcpPaths() {
   const paths = [
     path.join(os.homedir(), '.cursor', 'mcp.json'),
-    path.join(os.homedir(), '.trae-server', 'data', 'Machine', 'mcp.json')
+    getTraeMcpConfigPath()
   ];
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (workspaceFolder) {
@@ -120,11 +135,12 @@ export async function writeMcpConfigFile(mcpPath: string, apiKey: string) {
     data = {};
   }
 
-  // Determine if this is a Cursor/Trae config (in ~/.cursor or ~/.trae-server) or VS Code config (in workspace .vscode)
-  // Cursor config is in ~/.cursor/mcp.json, Trae config is in ~/.trae-server/data/Machine/mcp.json
+  // Determine if this is a Cursor/Trae config or VS Code config
+  // Cursor config is in ~/.cursor/mcp.json
+  // Trae config location varies by OS: Windows (%APPDATA%\Trae\User\mcp.json), macOS (~/Library/Application Support/Trae/User/mcp.json), Linux (~/.trae-server/data/Machine/mcp.json)
   // VS Code config is in workspace/.vscode/mcp.json
   const isCursorConfig = mcpPath.includes('.cursor') && !mcpPath.includes('.vscode');
-  const isTraeConfig = mcpPath.includes('.trae-server');
+  const isTraeConfig = mcpPath.includes('Trae') || mcpPath.includes('.trae-server');
   const configKey = (isCursorConfig || isTraeConfig) ? 'mcpServers' : 'servers';
 
   // Use appropriate key based on config type
@@ -156,10 +172,11 @@ export async function readApiKeyFromMcpConfigs(): Promise<string | undefined> {
       const data = JSON.parse(raw || '{}');
       
       // Determine if this is a Cursor/Trae config or VS Code config
-      // Cursor config is in ~/.cursor/mcp.json, Trae config is in ~/.trae-server/data/Machine/mcp.json
+      // Cursor config is in ~/.cursor/mcp.json
+      // Trae config location varies by OS: Windows (%APPDATA%\Trae\User\mcp.json), macOS (~/Library/Application Support/Trae/User/mcp.json), Linux (~/.trae-server/data/Machine/mcp.json)
       // VS Code config is in workspace/.vscode/mcp.json
       const isCursorConfig = mcpPath.includes('.cursor') && !mcpPath.includes('.vscode');
-      const isTraeConfig = mcpPath.includes('.trae-server');
+      const isTraeConfig = mcpPath.includes('Trae') || mcpPath.includes('.trae-server');
       const configKey = (isCursorConfig || isTraeConfig) ? 'mcpServers' : 'servers';
       
       // Try the appropriate key first, then fallback for backward compatibility
@@ -228,8 +245,11 @@ export async function clearQverisApiKeyFromMcpConfigs(): Promise<string[]> {
       const data = JSON.parse(raw || '{}');
       
       // Determine if this is a Cursor/Trae config or VS Code config
+      // Cursor config is in ~/.cursor/mcp.json
+      // Trae config location varies by OS: Windows (%APPDATA%\Trae\User\mcp.json), macOS (~/Library/Application Support/Trae/User/mcp.json), Linux (~/.trae-server/data/Machine/mcp.json)
+      // VS Code config is in workspace/.vscode/mcp.json
       const isCursorConfig = mcpPath.includes('.cursor') && !mcpPath.includes('.vscode');
-      const isTraeConfig = mcpPath.includes('.trae-server');
+      const isTraeConfig = mcpPath.includes('Trae') || mcpPath.includes('.trae-server');
       const configKey = (isCursorConfig || isTraeConfig) ? 'mcpServers' : 'servers';
       
       // Check if qveris exists in the config
