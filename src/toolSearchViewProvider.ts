@@ -367,16 +367,6 @@ export class ToolSearchViewProvider implements vscode.WebviewViewProvider {
 
           const performSearch = () => {
             console.log('Qveris: performSearch called from frontend');
-            // Check if logged in before performing search
-            const currentState = vscode.getState() || {};
-            if (!currentState.isLoggedIn) {
-              if (searchStatus) {
-                searchStatus.textContent = 'Please sign in first to search tools. Expand the Home view to sign in.';
-                searchStatus.className = 'status error';
-                searchStatus.style.display = 'block';
-              }
-              return;
-            }
             const query = searchInput?.value?.trim() || '';
             console.log('Qveris: Frontend search query: ' + query);
             if (!query) {
