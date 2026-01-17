@@ -7,7 +7,7 @@ import { ViewStateManager } from './stateManager';
 import { HomeViewProvider } from './homeViewProvider';
 import { ToolSearchViewProvider } from './toolSearchViewProvider';
 import { ToolSpecificationViewProvider } from './toolSpecificationViewProvider';
-import { copyCursorPrompt, openCursorPromptDoc, maybeEnsureCursorPromptInRules, maybeEnsureTraePromptInRules, maybeEnsureKiroPromptInRules, maybeEnsureCodebuddyPromptInRules, ensureMcpConfigWithStoredKey, secretKeyName, globalStateKey, generateOAuthState, ensureMcpConfigWithApiKey, generateSessionId, getIdeScheme, isCursorApp, isTraeApp, isKiroApp, isCodebuddyApp } from './utils';
+import { copyCursorPrompt, openCursorPromptDoc, maybeEnsureCursorPromptInRules, maybeEnsureTraePromptInRules, maybeEnsureKiroPromptInRules, maybeEnsureCodebuddyPromptInRules, maybeEnsureLingmaPromptInRules, ensureMcpConfigWithStoredKey, secretKeyName, globalStateKey, generateOAuthState, ensureMcpConfigWithApiKey, generateSessionId, getIdeScheme, isCursorApp, isTraeApp, isKiroApp, isCodebuddyApp, isLingmaApp } from './utils';
 import { initializeLogger, log, isTestMode } from './logger';
 
 let stateManager: ViewStateManager;
@@ -104,10 +104,10 @@ export async function activate(context: vscode.ExtensionContext) {
       log('Qveris: Query: ' + uri.query);
       log('Qveris: Fragment: ' + uri.fragment);
 
-      // Check for OAuth callback - scheme should be vscode, cursor, trae, kiro, or codebuddy, authority should match our extension ID
+      // Check for OAuth callback - scheme should be vscode, cursor, trae, kiro, codebuddy, or lingma, authority should match our extension ID
       const isOAuthCallback = uri.path === '/auth-callback' &&
                              uri.authority === 'QverisAI.qveris-ai' &&
-                             (uri.scheme === 'vscode' || uri.scheme === 'cursor' || uri.scheme === 'trae' || uri.scheme === 'kiro' || uri.scheme === 'codebuddy');
+                             (uri.scheme === 'vscode' || uri.scheme === 'cursor' || uri.scheme === 'trae' || uri.scheme === 'kiro' || uri.scheme === 'codebuddy' || uri.scheme === 'lingma');
 
       log('Qveris: Is OAuth callback? ' + isOAuthCallback);
 
@@ -121,13 +121,13 @@ export async function activate(context: vscode.ExtensionContext) {
         });
       } else {
         log('Qveris: URI does not match expected pattern.');
-        log('Qveris: Expected: scheme=vscode/cursor/trae/kiro/codebuddy, authority=QverisAI.qveris-ai, path=/auth-callback');
+        log('Qveris: Expected: scheme=vscode/cursor/trae/kiro/codebuddy/lingma, authority=QverisAI.qveris-ai, path=/auth-callback');
         log('Qveris: Actual: scheme=' + uri.scheme + ', authority=' + uri.authority + ', path=' + uri.path);
 
         // Also log if it's close but not exact match
         const isCloseMatch = uri.path === '/auth-callback' && uri.authority === 'QverisAI.qveris-ai';
         if (isCloseMatch) {
-          log('Qveris: URI is close match but scheme is wrong. Expected vscode/cursor/trae/kiro/codebuddy, got: ' + uri.scheme);
+          log('Qveris: URI is close match but scheme is wrong. Expected vscode/cursor/trae/kiro/codebuddy/lingma, got: ' + uri.scheme);
         }
       }
 
@@ -192,6 +192,7 @@ export async function activate(context: vscode.ExtensionContext) {
   await maybeEnsureTraePromptInRules(context, isNewInstallOrUpdate);
   await maybeEnsureKiroPromptInRules(context, isNewInstallOrUpdate);
   await maybeEnsureCodebuddyPromptInRules(context, isNewInstallOrUpdate);
+  await maybeEnsureLingmaPromptInRules(context, isNewInstallOrUpdate);
 
   // Also listen for workspace folder changes to ensure rules are installed when workspace becomes available
   const ensureRulesOnWorkspaceChange = async (silent: boolean = false) => {
@@ -199,6 +200,7 @@ export async function activate(context: vscode.ExtensionContext) {
     await maybeEnsureTraePromptInRules(context, false, silent);
     await maybeEnsureKiroPromptInRules(context, false, silent);
     await maybeEnsureCodebuddyPromptInRules(context, false, silent);
+    await maybeEnsureLingmaPromptInRules(context, false, silent);
   };
 
   // Check rules file on workspace folder changes (including when folders are opened)
@@ -217,13 +219,14 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  // Set up periodic check for rule files (only in Cursor, Trae, Kiro, or Codebuddy)
+  // Set up periodic check for rule files (only in Cursor, Trae, Kiro, Codebuddy, or Lingma)
   const isCursor = isCursorApp();
   const isTrae = isTraeApp();
   const isKiro = isKiroApp();
   const isCodebuddy = isCodebuddyApp();
-  if (isCursor || isTrae || isKiro || isCodebuddy) {
-    const ideName = isCodebuddy ? 'Codebuddy' : (isKiro ? 'Kiro' : (isTrae ? 'Trae' : 'Cursor'));
+  const isLingma = isLingmaApp();
+  if (isCursor || isTrae || isKiro || isCodebuddy || isLingma) {
+    const ideName = isLingma ? 'Lingma' : (isCodebuddy ? 'Codebuddy' : (isKiro ? 'Kiro' : (isTrae ? 'Trae' : 'Cursor')));
     log(`Qveris: Setting up periodic check for rule files in ${ideName}...`);
     
     // Check immediately if workspace is already available (silent to avoid duplicate messages)
@@ -283,7 +286,7 @@ async function initiateOAuthLogin(context: vscode.ExtensionContext) {
   // Store the state for CSRF protection
   await context.globalState.update(globalStateKey('oauthState'), state);
 
-  // Use vscode/cursor/trae/kiro/codebuddy protocol handler URL
+  // Use vscode/cursor/trae/kiro/codebuddy/lingma protocol handler URL
   const scheme = getIdeScheme();
   const callbackUrl = `${scheme}://QverisAI.qveris-ai/auth-callback`;
 

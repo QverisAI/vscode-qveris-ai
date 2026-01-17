@@ -35,7 +35,11 @@ export function isCodebuddyApp() {
   return (vscode.env.appName || '').toLowerCase().includes('codebuddy');
 }
 
-export function getIdeScheme(): 'vscode' | 'cursor' | 'trae' | 'kiro' | 'codebuddy' {
+export function isLingmaApp() {
+  return (vscode.env.appName || '').toLowerCase().includes('lingma');
+}
+
+export function getIdeScheme(): 'vscode' | 'cursor' | 'trae' | 'kiro' | 'codebuddy' | 'lingma' {
   if (isTraeApp()) {
     return 'trae';
   }
@@ -47,6 +51,9 @@ export function getIdeScheme(): 'vscode' | 'cursor' | 'trae' | 'kiro' | 'codebud
   }
   if (isCodebuddyApp()) {
     return 'codebuddy';
+  }
+  if (isLingmaApp()) {
+    return 'lingma';
   }
   return 'vscode';
 }
@@ -109,6 +116,18 @@ function getTraeMcpConfigPath(): string {
   }
 }
 
+function getLingmaMcpConfigPath(): string {
+  const platform = os.platform();
+  if (platform === 'win32') {
+    // Windows: %APPDATA%\Lingma\SharedClientCache\mcp.json
+    const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+    return path.join(appData, 'Lingma', 'SharedClientCache', 'mcp.json');
+  } else {
+    // Linux and macOS: ~/.config/Lingma/SharedClientCache/mcp.json
+    return path.join(os.homedir(), '.config', 'Lingma', 'SharedClientCache', 'mcp.json');
+  }
+}
+
 export function getMcpConfigPaths() {
   if (isTraeApp()) {
     return [getTraeMcpConfigPath()];
@@ -126,6 +145,10 @@ export function getMcpConfigPaths() {
     return [path.join(os.homedir(), '.codebuddy', 'mcp.json')];
   }
 
+  if (isLingmaApp()) {
+    return [getLingmaMcpConfigPath()];
+  }
+
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (workspaceFolder) {
     return [path.join(workspaceFolder.uri.fsPath, '.vscode', 'mcp.json')];
@@ -140,7 +163,8 @@ export function getAllKnownMcpPaths() {
     path.join(os.homedir(), '.cursor', 'mcp.json'),
     getTraeMcpConfigPath(),
     path.join(os.homedir(), '.kiro', 'settings', 'mcp.json'),
-    path.join(os.homedir(), '.codebuddy', 'mcp.json')
+    path.join(os.homedir(), '.codebuddy', 'mcp.json'),
+    getLingmaMcpConfigPath()
   ];
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (workspaceFolder) {
@@ -159,17 +183,19 @@ export async function writeMcpConfigFile(mcpPath: string, apiKey: string) {
     data = {};
   }
 
-  // Determine if this is a Cursor/Trae/Kiro/Codebuddy config or VS Code config
+  // Determine if this is a Cursor/Trae/Kiro/Codebuddy/Lingma config or VS Code config
   // Cursor config is in ~/.cursor/mcp.json
   // Trae config location varies by OS: Windows (%APPDATA%\Trae\User\mcp.json), macOS (~/Library/Application Support/Trae/User/mcp.json), Linux (~/.trae-server/data/Machine/mcp.json)
   // Kiro config is in ~/.kiro/settings/mcp.json
   // Codebuddy config is in ~/.codebuddy/mcp.json
+  // Lingma config location varies by OS: Windows (%APPDATA%\Lingma\SharedClientCache\mcp.json), Linux/macOS (~/.config/Lingma/SharedClientCache/mcp.json)
   // VS Code config is in workspace/.vscode/mcp.json
   const isCursorConfig = mcpPath.includes('.cursor') && !mcpPath.includes('.vscode');
   const isTraeConfig = mcpPath.includes('Trae') || mcpPath.includes('.trae-server');
   const isKiroConfig = mcpPath.includes('.kiro');
   const isCodebuddyConfig = mcpPath.includes('.codebuddy');
-  const configKey = (isCursorConfig || isTraeConfig || isKiroConfig || isCodebuddyConfig) ? 'mcpServers' : 'servers';
+  const isLingmaConfig = mcpPath.includes('Lingma');
+  const configKey = (isCursorConfig || isTraeConfig || isKiroConfig || isCodebuddyConfig || isLingmaConfig) ? 'mcpServers' : 'servers';
 
   // Use appropriate key based on config type
   if (!data[configKey] || typeof data[configKey] !== 'object') {
@@ -356,6 +382,10 @@ function buildCodebuddyRulesFileContent(existing: string) {
   return ['---', 'description: ', 'alwaysApply: true', 'enabled: true', `updatedAt: ${now}`, 'provider: ', '---', '', CURSOR_PROMPT, ''].join('\n');
 }
 
+function buildLingmaRulesFileContent(existing: string) {
+  return ['---', 'trigger: always_on', '---', '', CURSOR_PROMPT, ''].join('\n');
+}
+
 export async function maybeEnsureCursorPromptInRules(context: vscode.ExtensionContext, forceReplace: boolean = false, silent: boolean = false) {
   if (!isCursorApp()) return;
 
@@ -498,6 +528,44 @@ export async function maybeEnsureCodebuddyPromptInRules(context: vscode.Extensio
   } catch (error: any) {
     if (!silent) {
       vscode.window.showErrorMessage(`Failed to write QVeris prompt to Codebuddy rules: ${error?.message || error}`);
+    }
+  }
+}
+
+export async function maybeEnsureLingmaPromptInRules(context: vscode.ExtensionContext, forceReplace: boolean = false, silent: boolean = false) {
+  if (!isLingmaApp()) return;
+
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+  if (!workspaceFolder) return;
+
+  const workspaceRoot = workspaceFolder.uri.fsPath;
+  const rulesPath = path.join(workspaceRoot, '.lingma', 'rules', 'qveris.md');
+
+  try {
+    const existing = await fs.readFile(rulesPath, 'utf8').catch(() => '');
+    
+    // If forceReplace is true or file doesn't contain the prompt, write/update it
+    if (forceReplace || !existing.includes(CURSOR_PROMPT)) {
+      const dir = path.dirname(rulesPath);
+      await fs.mkdir(dir, { recursive: true });
+
+      const newContent = buildLingmaRulesFileContent(existing);
+
+      await fs.writeFile(rulesPath, newContent, 'utf8');
+      await context.globalState.update('qverisLingmaPromptCopied', true);
+      if (!silent) {
+        if (forceReplace) {
+          vscode.window.showInformationMessage('QVeris MCP prompt updated in Lingma workspace rules file.');
+        } else {
+          vscode.window.showInformationMessage('QVeris MCP prompt written to Lingma workspace rules file.');
+        }
+      }
+    } else {
+      await context.globalState.update('qverisLingmaPromptCopied', true);
+    }
+  } catch (error: any) {
+    if (!silent) {
+      vscode.window.showErrorMessage(`Failed to write QVeris prompt to Lingma workspace rules: ${error?.message || error}`);
     }
   }
 }
