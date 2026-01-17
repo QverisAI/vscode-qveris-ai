@@ -39,7 +39,11 @@ export function isLingmaApp() {
   return (vscode.env.appName || '').toLowerCase().includes('lingma');
 }
 
-export function getIdeScheme(): 'vscode' | 'cursor' | 'trae' | 'kiro' | 'codebuddy' | 'lingma' {
+export function isQoderApp() {
+  return (vscode.env.appName || '').toLowerCase().includes('qoder');
+}
+
+export function getIdeScheme(): 'vscode' | 'cursor' | 'trae' | 'kiro' | 'codebuddy' | 'lingma' | 'qoder' {
   if (isTraeApp()) {
     return 'trae';
   }
@@ -54,6 +58,9 @@ export function getIdeScheme(): 'vscode' | 'cursor' | 'trae' | 'kiro' | 'codebud
   }
   if (isLingmaApp()) {
     return 'lingma';
+  }
+  if (isQoderApp()) {
+    return 'qoder';
   }
   return 'vscode';
 }
@@ -128,6 +135,18 @@ function getLingmaMcpConfigPath(): string {
   }
 }
 
+function getQoderMcpConfigPath(): string {
+  const platform = os.platform();
+  if (platform === 'win32') {
+    // Windows: %APPDATA%\Qoder\SharedClientCache\mcp.json
+    const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+    return path.join(appData, 'Qoder', 'SharedClientCache', 'mcp.json');
+  } else {
+    // Linux and macOS: ~/.config/Qoder/SharedClientCache/mcp.json
+    return path.join(os.homedir(), '.config', 'Qoder', 'SharedClientCache', 'mcp.json');
+  }
+}
+
 export function getMcpConfigPaths() {
   if (isTraeApp()) {
     return [getTraeMcpConfigPath()];
@@ -149,6 +168,10 @@ export function getMcpConfigPaths() {
     return [getLingmaMcpConfigPath()];
   }
 
+  if (isQoderApp()) {
+    return [getQoderMcpConfigPath()];
+  }
+
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (workspaceFolder) {
     return [path.join(workspaceFolder.uri.fsPath, '.vscode', 'mcp.json')];
@@ -164,7 +187,8 @@ export function getAllKnownMcpPaths() {
     getTraeMcpConfigPath(),
     path.join(os.homedir(), '.kiro', 'settings', 'mcp.json'),
     path.join(os.homedir(), '.codebuddy', 'mcp.json'),
-    getLingmaMcpConfigPath()
+    getLingmaMcpConfigPath(),
+    getQoderMcpConfigPath()
   ];
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (workspaceFolder) {
@@ -183,19 +207,21 @@ export async function writeMcpConfigFile(mcpPath: string, apiKey: string) {
     data = {};
   }
 
-  // Determine if this is a Cursor/Trae/Kiro/Codebuddy/Lingma config or VS Code config
+  // Determine if this is a Cursor/Trae/Kiro/Codebuddy/Lingma/Qoder config or VS Code config
   // Cursor config is in ~/.cursor/mcp.json
   // Trae config location varies by OS: Windows (%APPDATA%\Trae\User\mcp.json), macOS (~/Library/Application Support/Trae/User/mcp.json), Linux (~/.trae-server/data/Machine/mcp.json)
   // Kiro config is in ~/.kiro/settings/mcp.json
   // Codebuddy config is in ~/.codebuddy/mcp.json
   // Lingma config location varies by OS: Windows (%APPDATA%\Lingma\SharedClientCache\mcp.json), Linux/macOS (~/.config/Lingma/SharedClientCache/mcp.json)
+  // Qoder config location varies by OS: Windows (%APPDATA%\Qoder\SharedClientCache\mcp.json), Linux/macOS (~/.config/Qoder/SharedClientCache/mcp.json)
   // VS Code config is in workspace/.vscode/mcp.json
   const isCursorConfig = mcpPath.includes('.cursor') && !mcpPath.includes('.vscode');
   const isTraeConfig = mcpPath.includes('Trae') || mcpPath.includes('.trae-server');
   const isKiroConfig = mcpPath.includes('.kiro');
   const isCodebuddyConfig = mcpPath.includes('.codebuddy');
   const isLingmaConfig = mcpPath.includes('Lingma');
-  const configKey = (isCursorConfig || isTraeConfig || isKiroConfig || isCodebuddyConfig || isLingmaConfig) ? 'mcpServers' : 'servers';
+  const isQoderConfig = mcpPath.includes('Qoder');
+  const configKey = (isCursorConfig || isTraeConfig || isKiroConfig || isCodebuddyConfig || isLingmaConfig || isQoderConfig) ? 'mcpServers' : 'servers';
 
   // Use appropriate key based on config type
   if (!data[configKey] || typeof data[configKey] !== 'object') {
@@ -386,6 +412,10 @@ function buildLingmaRulesFileContent(existing: string) {
   return ['---', 'trigger: always_on', '---', '', CURSOR_PROMPT, ''].join('\n');
 }
 
+function buildQoderRulesFileContent(existing: string) {
+  return ['---', 'trigger: always_on', '---', '', CURSOR_PROMPT, ''].join('\n');
+}
+
 export async function maybeEnsureCursorPromptInRules(context: vscode.ExtensionContext, forceReplace: boolean = false, silent: boolean = false) {
   if (!isCursorApp()) return;
 
@@ -566,6 +596,44 @@ export async function maybeEnsureLingmaPromptInRules(context: vscode.ExtensionCo
   } catch (error: any) {
     if (!silent) {
       vscode.window.showErrorMessage(`Failed to write QVeris prompt to Lingma workspace rules: ${error?.message || error}`);
+    }
+  }
+}
+
+export async function maybeEnsureQoderPromptInRules(context: vscode.ExtensionContext, forceReplace: boolean = false, silent: boolean = false) {
+  if (!isQoderApp()) return;
+
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+  if (!workspaceFolder) return;
+
+  const workspaceRoot = workspaceFolder.uri.fsPath;
+  const rulesPath = path.join(workspaceRoot, '.qoder', 'rules', 'qveris.md');
+
+  try {
+    const existing = await fs.readFile(rulesPath, 'utf8').catch(() => '');
+    
+    // If forceReplace is true or file doesn't contain the prompt, write/update it
+    if (forceReplace || !existing.includes(CURSOR_PROMPT)) {
+      const dir = path.dirname(rulesPath);
+      await fs.mkdir(dir, { recursive: true });
+
+      const newContent = buildQoderRulesFileContent(existing);
+
+      await fs.writeFile(rulesPath, newContent, 'utf8');
+      await context.globalState.update('qverisQoderPromptCopied', true);
+      if (!silent) {
+        if (forceReplace) {
+          vscode.window.showInformationMessage('QVeris MCP prompt updated in Qoder workspace rules file.');
+        } else {
+          vscode.window.showInformationMessage('QVeris MCP prompt written to Qoder workspace rules file.');
+        }
+      }
+    } else {
+      await context.globalState.update('qverisQoderPromptCopied', true);
+    }
+  } catch (error: any) {
+    if (!silent) {
+      vscode.window.showErrorMessage(`Failed to write QVeris prompt to Qoder workspace rules: ${error?.message || error}`);
     }
   }
 }

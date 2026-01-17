@@ -1,6 +1,6 @@
-# QVeris AI VS Code/Cursor/Trae/Kiro/Codebuddy/Lingma Extension
+# QVeris AI VS Code/Cursor/Trae/Kiro/Codebuddy/Lingma/Qoder Extension
 
-Official extension for [QVeris.ai](https://qveris.ai). Sign in once, get your API key securely stored, auto-install the QVeris MCP SDK, and run QVeris tools directly from VS Code, Cursor, Trae, Kiro, Codebuddy or Lingma.
+Official extension for [QVeris.ai](https://qveris.ai). Sign in once, get your API key securely stored, auto-install the QVeris MCP SDK, and run QVeris tools directly from VS Code, Cursor, Trae, Kiro, Codebuddy, Lingma or Qoder.
 
 ## About QVeris
 QVeris is an intelligent tool platform for developers, providing MCP servers with rich tool search/execution capabilities, helping you complete information queries, automation operations, and workflow orchestration within your editor.
@@ -14,6 +14,7 @@ QVeris is an intelligent tool platform for developers, providing MCP servers wit
   - Kiro: `~/.kiro/settings/mcp.json`
   - Codebuddy: `~/.codebuddy/mcp.json`
   - Lingma: Platform-specific location (Windows: `%APPDATA%\Lingma\SharedClientCache\mcp.json`, Linux/macOS: `~/.config/Lingma/SharedClientCache/mcp.json`)
+  - Qoder: Platform-specific location (Windows: `%APPDATA%\Qoder\SharedClientCache\mcp.json`, Linux/macOS: `~/.config/Qoder/SharedClientCache/mcp.json`)
   - VS Code: Workspace `.vscode/mcp.json`
 - **IDE Rules Prompt**: Automatically adds MCP prompt text in IDE-specific rules files:
   - Cursor: `.cursor/rules/qveris.mdc` (workspace)
@@ -21,10 +22,11 @@ QVeris is an intelligent tool platform for developers, providing MCP servers wit
   - Kiro: `~/.kiro/steering/qveris.md` (global)
   - Codebuddy: `~/.codebuddy/rules/qveris.mdc` (global)
   - Lingma: `.lingma/rules/qveris.md` (workspace)
+  - Qoder: `.qoder/rules/qveris.md` (workspace)
 - **Search And Execute**: Search and run QVeris AI tools directly.
 
 ## Requirements
-- VS Code 1.85+, Cursor, Trae, Kiro, Codebuddy or Lingma
+- VS Code 1.85+, Cursor, Trae, Kiro, Codebuddy, Lingma or Qoder
 - Node.js 18+
 - A QVeris.ai account (email + password)
 
@@ -40,9 +42,9 @@ QVeris is an intelligent tool platform for developers, providing MCP servers wit
 4. After login, you can directly use: copy Key, open website, logout, etc.
 
 ## MCP Configuration Example (Auto-written)
-The extension will write/update MCP configuration files based on your IDE. For Cursor, Kiro, Codebuddy, Lingma, and Trae, it uses the `mcpServers` key. For VS Code, it uses the `servers` key.
+The extension will write/update MCP configuration files based on your IDE. For Cursor, Kiro, Codebuddy, Lingma, Qoder, and Trae, it uses the `mcpServers` key. For VS Code, it uses the `servers` key.
 
-Example configuration (Cursor/Kiro/Codebuddy/Lingma/Trae format):
+Example configuration (Cursor/Kiro/Codebuddy/Lingma/Qoder/Trae format):
 ```json
 {
   "mcpServers": {
@@ -77,6 +79,11 @@ Example configuration (Cursor/Kiro/Codebuddy/Lingma/Trae format):
 - MCP config: Platform-specific location (Windows: `%APPDATA%\Lingma\SharedClientCache\mcp.json`, Linux/macOS: `~/.config/Lingma/SharedClientCache/mcp.json`) (uses `mcpServers` key)
 - Rules file: `.lingma/rules/qveris.md` (workspace, with Lingma-specific header: `trigger: always_on`)
 - Browser schema: `lingma://` for OAuth callbacks
+
+### Qoder
+- MCP config: Platform-specific location (Windows: `%APPDATA%\Qoder\SharedClientCache\mcp.json`, Linux/macOS: `~/.config/Qoder/SharedClientCache/mcp.json`) (uses `mcpServers` key)
+- Rules file: `.qoder/rules/qveris.md` (workspace, with Qoder-specific header: `trigger: always_on`)
+- Browser schema: `qoder://` for OAuth callbacks
 
 ### Trae
 - MCP config: Platform-specific location (uses `mcpServers` key)
