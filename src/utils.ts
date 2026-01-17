@@ -27,12 +27,19 @@ export function isTraeApp() {
   return (vscode.env.appName || '').toLowerCase().includes('trae');
 }
 
-export function getIdeScheme(): 'vscode' | 'cursor' | 'trae' {
+export function isKiroApp() {
+  return (vscode.env.appName || '').toLowerCase().includes('kiro');
+}
+
+export function getIdeScheme(): 'vscode' | 'cursor' | 'trae' | 'kiro' {
   if (isTraeApp()) {
     return 'trae';
   }
   if (isCursorApp()) {
     return 'cursor';
+  }
+  if (isKiroApp()) {
+    return 'kiro';
   }
   return 'vscode';
 }
@@ -104,6 +111,10 @@ export function getMcpConfigPaths() {
     return [path.join(os.homedir(), '.cursor', 'mcp.json')];
   }
 
+  if (isKiroApp()) {
+    return [path.join(os.homedir(), '.kiro', 'settings', 'mcp.json')];
+  }
+
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (workspaceFolder) {
     return [path.join(workspaceFolder.uri.fsPath, '.vscode', 'mcp.json')];
@@ -116,7 +127,8 @@ export function getMcpConfigPaths() {
 export function getAllKnownMcpPaths() {
   const paths = [
     path.join(os.homedir(), '.cursor', 'mcp.json'),
-    getTraeMcpConfigPath()
+    getTraeMcpConfigPath(),
+    path.join(os.homedir(), '.kiro', 'settings', 'mcp.json')
   ];
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (workspaceFolder) {
@@ -135,13 +147,15 @@ export async function writeMcpConfigFile(mcpPath: string, apiKey: string) {
     data = {};
   }
 
-  // Determine if this is a Cursor/Trae config or VS Code config
+  // Determine if this is a Cursor/Trae/Kiro config or VS Code config
   // Cursor config is in ~/.cursor/mcp.json
   // Trae config location varies by OS: Windows (%APPDATA%\Trae\User\mcp.json), macOS (~/Library/Application Support/Trae/User/mcp.json), Linux (~/.trae-server/data/Machine/mcp.json)
+  // Kiro config is in ~/.kiro/settings/mcp.json
   // VS Code config is in workspace/.vscode/mcp.json
   const isCursorConfig = mcpPath.includes('.cursor') && !mcpPath.includes('.vscode');
   const isTraeConfig = mcpPath.includes('Trae') || mcpPath.includes('.trae-server');
-  const configKey = (isCursorConfig || isTraeConfig) ? 'mcpServers' : 'servers';
+  const isKiroConfig = mcpPath.includes('.kiro');
+  const configKey = (isCursorConfig || isTraeConfig || isKiroConfig) ? 'mcpServers' : 'servers';
 
   // Use appropriate key based on config type
   if (!data[configKey] || typeof data[configKey] !== 'object') {
@@ -171,13 +185,15 @@ export async function readApiKeyFromMcpConfigs(): Promise<string | undefined> {
       const raw = await fs.readFile(mcpPath, 'utf8');
       const data = JSON.parse(raw || '{}');
       
-      // Determine if this is a Cursor/Trae config or VS Code config
+      // Determine if this is a Cursor/Trae/Kiro config or VS Code config
       // Cursor config is in ~/.cursor/mcp.json
       // Trae config location varies by OS: Windows (%APPDATA%\Trae\User\mcp.json), macOS (~/Library/Application Support/Trae/User/mcp.json), Linux (~/.trae-server/data/Machine/mcp.json)
+      // Kiro config is in ~/.kiro/settings/mcp.json
       // VS Code config is in workspace/.vscode/mcp.json
       const isCursorConfig = mcpPath.includes('.cursor') && !mcpPath.includes('.vscode');
       const isTraeConfig = mcpPath.includes('Trae') || mcpPath.includes('.trae-server');
-      const configKey = (isCursorConfig || isTraeConfig) ? 'mcpServers' : 'servers';
+      const isKiroConfig = mcpPath.includes('.kiro');
+      const configKey = (isCursorConfig || isTraeConfig || isKiroConfig) ? 'mcpServers' : 'servers';
       
       // Try the appropriate key first, then fallback for backward compatibility
       const key = data?.[configKey]?.qveris?.env?.QVERIS_API_KEY || 
@@ -244,13 +260,15 @@ export async function clearQverisApiKeyFromMcpConfigs(): Promise<string[]> {
       const raw = await fs.readFile(mcpPath, 'utf8');
       const data = JSON.parse(raw || '{}');
       
-      // Determine if this is a Cursor/Trae config or VS Code config
+      // Determine if this is a Cursor/Trae/Kiro config or VS Code config
       // Cursor config is in ~/.cursor/mcp.json
       // Trae config location varies by OS: Windows (%APPDATA%\Trae\User\mcp.json), macOS (~/Library/Application Support/Trae/User/mcp.json), Linux (~/.trae-server/data/Machine/mcp.json)
+      // Kiro config is in ~/.kiro/settings/mcp.json
       // VS Code config is in workspace/.vscode/mcp.json
       const isCursorConfig = mcpPath.includes('.cursor') && !mcpPath.includes('.vscode');
       const isTraeConfig = mcpPath.includes('Trae') || mcpPath.includes('.trae-server');
-      const configKey = (isCursorConfig || isTraeConfig) ? 'mcpServers' : 'servers';
+      const isKiroConfig = mcpPath.includes('.kiro');
+      const configKey = (isCursorConfig || isTraeConfig || isKiroConfig) ? 'mcpServers' : 'servers';
       
       // Check if qveris exists in the config
       if (data[configKey] && data[configKey].qveris) {
@@ -313,6 +331,10 @@ function resolveRulesPath(filePath: string, workspaceRoot: string) {
 
 function buildRulesFileContent(existing: string) {
   return ['---', 'description: Utilizing third-party APIs to retrieve and process data is applicable in various fields such as finance, economics, healthcare, sports, scientific research, and more', 'alwaysApply: false', '---', '', CURSOR_PROMPT, ''].join('\n');
+}
+
+function buildKiroRulesFileContent(existing: string) {
+  return ['---', 'inclusion: always', '---', '', CURSOR_PROMPT, ''].join('\n');
 }
 
 export async function maybeEnsureCursorPromptInRules(context: vscode.ExtensionContext, forceReplace: boolean = false, silent: boolean = false) {
@@ -389,6 +411,40 @@ export async function maybeEnsureTraePromptInRules(context: vscode.ExtensionCont
   } catch (error: any) {
     if (!silent) {
       vscode.window.showErrorMessage(`Failed to write Qveris prompt to workspace rules: ${error?.message || error}`);
+    }
+  }
+}
+
+export async function maybeEnsureKiroPromptInRules(context: vscode.ExtensionContext, forceReplace: boolean = false, silent: boolean = false) {
+  if (!isKiroApp()) return;
+
+  const rulesPath = path.join(os.homedir(), '.kiro', 'steering', 'qveris.md');
+
+  try {
+    const existing = await fs.readFile(rulesPath, 'utf8').catch(() => '');
+    
+    // If forceReplace is true or file doesn't contain the prompt, write/update it
+    if (forceReplace || !existing.includes(CURSOR_PROMPT)) {
+      const dir = path.dirname(rulesPath);
+      await fs.mkdir(dir, { recursive: true });
+
+      const newContent = buildKiroRulesFileContent(existing);
+
+      await fs.writeFile(rulesPath, newContent, 'utf8');
+      await context.globalState.update('qverisKiroPromptCopied', true);
+      if (!silent) {
+        if (forceReplace) {
+          vscode.window.showInformationMessage('Qveris MCP prompt updated in Kiro rules file.');
+        } else {
+          vscode.window.showInformationMessage('Qveris MCP prompt written to Kiro rules file.');
+        }
+      }
+    } else {
+      await context.globalState.update('qverisKiroPromptCopied', true);
+    }
+  } catch (error: any) {
+    if (!silent) {
+      vscode.window.showErrorMessage(`Failed to write Qveris prompt to Kiro rules: ${error?.message || error}`);
     }
   }
 }
