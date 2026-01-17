@@ -1,6 +1,6 @@
-# QVeris AI VS Code/Cursor/Trae/Kiro Extension
+# QVeris AI VS Code/Cursor/Trae/Kiro/Codebuddy Extension
 
-Official extension for [QVeris.ai](https://qveris.ai). Sign in once, get your API key securely stored, auto-install the QVeris MCP SDK, and run QVeris tools directly from VS Code, Cursor, Trae or Kiro.
+Official extension for [QVeris.ai](https://qveris.ai). Sign in once, get your API key securely stored, auto-install the QVeris MCP SDK, and run QVeris tools directly from VS Code, Cursor, Trae, Kiro or Codebuddy.
 
 ## About QVeris
 QVeris is an intelligent tool platform for developers, providing MCP servers with rich tool search/execution capabilities, helping you complete information queries, automation operations, and workflow orchestration within your editor.
@@ -12,15 +12,17 @@ QVeris is an intelligent tool platform for developers, providing MCP servers wit
   - Cursor: `~/.cursor/mcp.json`
   - Trae: Platform-specific location (Windows: `%APPDATA%\Trae\User\mcp.json`, macOS: `~/Library/Application Support/Trae/User/mcp.json`, Linux: `~/.trae-server/data/Machine/mcp.json`)
   - Kiro: `~/.kiro/settings/mcp.json`
+  - Codebuddy: `~/.codebuddy/mcp.json`
   - VS Code: Workspace `.vscode/mcp.json`
 - **IDE Rules Prompt**: Automatically adds MCP prompt text in IDE-specific rules files:
   - Cursor: `.cursor/rules/qveris.mdc` (workspace)
   - Trae: `.trae/rules/qveris.md` (workspace)
   - Kiro: `~/.kiro/steering/qveris.md` (global)
+  - Codebuddy: `~/.codebuddy/rules/qveris.mdc` (global)
 - **Search And Execute**: Search and run QVeris AI tools directly.
 
 ## Requirements
-- VS Code 1.85+, Cursor, Trae or Kiro
+- VS Code 1.85+, Cursor, Trae, Kiro or Codebuddy
 - Node.js 18+
 - A QVeris.ai account (email + password)
 
@@ -36,9 +38,9 @@ QVeris is an intelligent tool platform for developers, providing MCP servers wit
 4. After login, you can directly use: copy Key, open website, logout, etc.
 
 ## MCP Configuration Example (Auto-written)
-The extension will write/update MCP configuration files based on your IDE. For Cursor, Kiro, and Trae, it uses the `mcpServers` key. For VS Code, it uses the `servers` key.
+The extension will write/update MCP configuration files based on your IDE. For Cursor, Kiro, Codebuddy, and Trae, it uses the `mcpServers` key. For VS Code, it uses the `servers` key.
 
-Example configuration (Cursor/Kiro/Trae format):
+Example configuration (Cursor/Kiro/Codebuddy/Trae format):
 ```json
 {
   "mcpServers": {
@@ -63,6 +65,11 @@ Example configuration (Cursor/Kiro/Trae format):
 - MCP config: `~/.kiro/settings/mcp.json` (uses `mcpServers` key)
 - Rules file: `~/.kiro/steering/qveris.md` (global, with Kiro-specific header: `inclusion: always`)
 - Browser schema: `kiro://` for OAuth callbacks
+
+### Codebuddy
+- MCP config: `~/.codebuddy/mcp.json` (uses `mcpServers` key)
+- Rules file: `~/.codebuddy/rules/qveris.mdc` (global, with Codebuddy-specific header including `alwaysApply: true`, `enabled: true`, `updatedAt`, etc.)
+- Browser schema: `codebuddy://` for OAuth callbacks
 
 ### Trae
 - MCP config: Platform-specific location (uses `mcpServers` key)

@@ -31,7 +31,11 @@ export function isKiroApp() {
   return (vscode.env.appName || '').toLowerCase().includes('kiro');
 }
 
-export function getIdeScheme(): 'vscode' | 'cursor' | 'trae' | 'kiro' {
+export function isCodebuddyApp() {
+  return (vscode.env.appName || '').toLowerCase().includes('codebuddy');
+}
+
+export function getIdeScheme(): 'vscode' | 'cursor' | 'trae' | 'kiro' | 'codebuddy' {
   if (isTraeApp()) {
     return 'trae';
   }
@@ -40,6 +44,9 @@ export function getIdeScheme(): 'vscode' | 'cursor' | 'trae' | 'kiro' {
   }
   if (isKiroApp()) {
     return 'kiro';
+  }
+  if (isCodebuddyApp()) {
+    return 'codebuddy';
   }
   return 'vscode';
 }
@@ -115,6 +122,10 @@ export function getMcpConfigPaths() {
     return [path.join(os.homedir(), '.kiro', 'settings', 'mcp.json')];
   }
 
+  if (isCodebuddyApp()) {
+    return [path.join(os.homedir(), '.codebuddy', 'mcp.json')];
+  }
+
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (workspaceFolder) {
     return [path.join(workspaceFolder.uri.fsPath, '.vscode', 'mcp.json')];
@@ -128,7 +139,8 @@ export function getAllKnownMcpPaths() {
   const paths = [
     path.join(os.homedir(), '.cursor', 'mcp.json'),
     getTraeMcpConfigPath(),
-    path.join(os.homedir(), '.kiro', 'settings', 'mcp.json')
+    path.join(os.homedir(), '.kiro', 'settings', 'mcp.json'),
+    path.join(os.homedir(), '.codebuddy', 'mcp.json')
   ];
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (workspaceFolder) {
@@ -147,15 +159,17 @@ export async function writeMcpConfigFile(mcpPath: string, apiKey: string) {
     data = {};
   }
 
-  // Determine if this is a Cursor/Trae/Kiro config or VS Code config
+  // Determine if this is a Cursor/Trae/Kiro/Codebuddy config or VS Code config
   // Cursor config is in ~/.cursor/mcp.json
   // Trae config location varies by OS: Windows (%APPDATA%\Trae\User\mcp.json), macOS (~/Library/Application Support/Trae/User/mcp.json), Linux (~/.trae-server/data/Machine/mcp.json)
   // Kiro config is in ~/.kiro/settings/mcp.json
+  // Codebuddy config is in ~/.codebuddy/mcp.json
   // VS Code config is in workspace/.vscode/mcp.json
   const isCursorConfig = mcpPath.includes('.cursor') && !mcpPath.includes('.vscode');
   const isTraeConfig = mcpPath.includes('Trae') || mcpPath.includes('.trae-server');
   const isKiroConfig = mcpPath.includes('.kiro');
-  const configKey = (isCursorConfig || isTraeConfig || isKiroConfig) ? 'mcpServers' : 'servers';
+  const isCodebuddyConfig = mcpPath.includes('.codebuddy');
+  const configKey = (isCursorConfig || isTraeConfig || isKiroConfig || isCodebuddyConfig) ? 'mcpServers' : 'servers';
 
   // Use appropriate key based on config type
   if (!data[configKey] || typeof data[configKey] !== 'object') {
@@ -337,6 +351,11 @@ function buildKiroRulesFileContent(existing: string) {
   return ['---', 'inclusion: always', '---', '', CURSOR_PROMPT, ''].join('\n');
 }
 
+function buildCodebuddyRulesFileContent(existing: string) {
+  const now = new Date().toISOString();
+  return ['---', 'description: ', 'alwaysApply: true', 'enabled: true', `updatedAt: ${now}`, 'provider: ', '---', '', CURSOR_PROMPT, ''].join('\n');
+}
+
 export async function maybeEnsureCursorPromptInRules(context: vscode.ExtensionContext, forceReplace: boolean = false, silent: boolean = false) {
   if (!isCursorApp()) return;
 
@@ -445,6 +464,40 @@ export async function maybeEnsureKiroPromptInRules(context: vscode.ExtensionCont
   } catch (error: any) {
     if (!silent) {
       vscode.window.showErrorMessage(`Failed to write Qveris prompt to Kiro rules: ${error?.message || error}`);
+    }
+  }
+}
+
+export async function maybeEnsureCodebuddyPromptInRules(context: vscode.ExtensionContext, forceReplace: boolean = false, silent: boolean = false) {
+  if (!isCodebuddyApp()) return;
+
+  const rulesPath = path.join(os.homedir(), '.codebuddy', 'rules', 'qveris.mdc');
+
+  try {
+    const existing = await fs.readFile(rulesPath, 'utf8').catch(() => '');
+    
+    // If forceReplace is true or file doesn't contain the prompt, write/update it
+    if (forceReplace || !existing.includes(CURSOR_PROMPT)) {
+      const dir = path.dirname(rulesPath);
+      await fs.mkdir(dir, { recursive: true });
+
+      const newContent = buildCodebuddyRulesFileContent(existing);
+
+      await fs.writeFile(rulesPath, newContent, 'utf8');
+      await context.globalState.update('qverisCodebuddyPromptCopied', true);
+      if (!silent) {
+        if (forceReplace) {
+          vscode.window.showInformationMessage('QVeris MCP prompt updated in Codebuddy rules file.');
+        } else {
+          vscode.window.showInformationMessage('QVeris MCP prompt written to Codebuddy rules file.');
+        }
+      }
+    } else {
+      await context.globalState.update('qverisCodebuddyPromptCopied', true);
+    }
+  } catch (error: any) {
+    if (!silent) {
+      vscode.window.showErrorMessage(`Failed to write QVeris prompt to Codebuddy rules: ${error?.message || error}`);
     }
   }
 }
