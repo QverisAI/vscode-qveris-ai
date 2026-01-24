@@ -56,6 +56,12 @@ export class HomeViewProvider extends BaseViewProvider implements vscode.Webview
         case 'copyApiKey':
           await vscode.commands.executeCommand('vscode-qveris-ai.copyApiKey');
           break;
+        case 'openWebsite':
+          await vscode.commands.executeCommand('vscode-qveris-ai.openWebsite');
+          break;
+        case 'tryExample':
+          await vscode.commands.executeCommand('vscode-qveris-ai.tryExample');
+          break;
       }
     });
 
@@ -109,77 +115,474 @@ export class HomeViewProvider extends BaseViewProvider implements vscode.Webview
 
   private getHtml(webview: vscode.Webview): string {
     const nonce = getNonce();
+    // Get the logo image URI
+    const logoUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'media', 'qveris.png')
+    );
+    // Get the demo image URIs
+    const demo1Uri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'media', 'demo1.png')
+    );
+    const demo2Uri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'media', 'demo2.png')
+    );
     const styles = `
-      :root { color-scheme: light dark; }
-      body { font-family: var(--vscode-font-family); padding: 12px; color: var(--vscode-foreground); background: var(--vscode-sideBar-background, var(--vscode-editor-background)); }
-      .card { border: 1px solid var(--vscode-editorWidget-border); border-radius: 8px; padding: 12px; background: var(--vscode-list-background, var(--vscode-sideBar-background, var(--vscode-editor-background))); margin-bottom: 12px; }
-      .row { display: flex; gap: 8px; margin-bottom: 8px; }
-      input { width: 100%; padding: 6px; border-radius: 4px; border: 1px solid var(--vscode-input-border); background: var(--vscode-input-background); color: var(--vscode-input-foreground); }
-      button { padding: 6px 10px; border: 1px solid var(--vscode-button-border); background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-radius: 4px; cursor: pointer; }
-      button.secondary {
-        background: var(--vscode-button-secondaryBackground, transparent);
-        color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
-        border-color: var(--vscode-button-secondaryBorder, var(--vscode-button-border));
+      :root { 
+        color-scheme: light dark; 
       }
-      button:disabled { opacity: 0.5; cursor: not-allowed; }
-      .status { margin-top: 8px; font-size: 12px; color: var(--vscode-descriptionForeground); }
-      .success { color: #2ea043; }
-      .error { color: #f85149; }
-      .user-header { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid var(--vscode-editorWidget-border); margin-bottom: 12px; }
-      .user-info { font-size: 14px; font-weight: 500; }
-      .logout-btn { 
-        background: var(--vscode-button-background); 
-        border: 1px solid var(--vscode-button-border); 
-        cursor: pointer; 
-        padding: 6px 12px; 
-        color: var(--vscode-button-foreground); 
-        font-size: 12px;
-        border-radius: 4px;
-        font-weight: 500;
+      
+      * {
+        box-sizing: border-box;
       }
-      .logout-btn:hover { 
-        background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
-        opacity: 0.9;
-      }
-      .api-key-section { 
-        padding: 12px; 
-        border-bottom: 1px solid var(--vscode-editorWidget-border); 
-        margin-bottom: 12px; 
-      }
-      .api-key-label { 
-        font-size: 12px; 
-        color: var(--vscode-descriptionForeground); 
-        margin-bottom: 6px; 
-      }
-      .api-key-display { 
-        display: flex; 
-        align-items: center; 
-        gap: 8px; 
-      }
-      .api-key-value { 
-        font-family: var(--vscode-editor-font-family, monospace); 
-        font-size: 12px; 
+      
+      body { 
+        font-family: var(--vscode-font-family); 
+        padding: 0;
+        margin: 0;
         color: var(--vscode-foreground); 
-        flex: 1; 
-        padding: 4px 8px; 
-        background: var(--vscode-input-background); 
-        border: 1px solid var(--vscode-input-border); 
-        border-radius: 4px; 
+        background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+        line-height: 1.5;
       }
-      .copy-btn { 
-        padding: 4px 8px; 
-        font-size: 11px; 
-        background: var(--vscode-button-secondaryBackground, transparent);
-        color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
-        border: 1px solid var(--vscode-button-secondaryBorder, var(--vscode-button-border));
+      
+      .container {
+        padding: 20px;
+        max-width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      
+      /* Welcome Card - Logged Out State */
+      .welcome-card {
+        background: var(--vscode-sideBar-background);
+        border: 1px solid var(--vscode-editorWidget-border);
+        border-radius: 16px;
+        padding: 32px 24px;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 24px;
+      }
+
+      .logo-title-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+
+      .logo-container {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+
+      .logo-container img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+      
+      .welcome-header {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+      
+      .welcome-title {
+        font-size: 22px;
+        font-weight: 700;
+        margin: 0;
+        color: var(--vscode-foreground);
+        letter-spacing: -0.5px;
+      }
+      
+      .welcome-subtitle {
+        font-size: 13px;
+        color: var(--vscode-descriptionForeground);
+        margin: 0;
+        line-height: 1.6;
+        max-width: 240px;
+      }
+      
+      .login-button {
+        width: 100%;
+        padding: 12px 24px;
+        background: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+        border: none;
+        border-radius: 10px;
         cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        margin-top: 8px;
+      }
+      
+      .login-button:hover {
+        background: var(--vscode-button-hoverBackground);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+      }
+      
+      .login-button:active {
+        transform: translateY(0);
+      }
+      
+      .status {
+        width: 100%;
+        font-size: 12px;
+        padding: 10px;
+        border-radius: 8px;
+        background: var(--vscode-input-background);
+        border: 1px solid var(--vscode-input-border);
+        text-align: left;
+      }
+      
+      .status.error {
+        color: var(--vscode-errorForeground);
+        border-color: var(--vscode-errorForeground);
+        background: rgba(248, 81, 73, 0.05);
+      }
+      
+      /* User Profile Card - Logged In State */
+      .profile-card {
+        background: var(--vscode-sideBar-background);
+        border: 1px solid var(--vscode-editorWidget-border);
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+      }
+      
+      .profile-header {
+        background: var(--vscode-list-hoverBackground);
+        padding: 20px 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--vscode-divider);
+      }
+      
+      .user-info-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      
+      .user-label {
+        font-size: 10px;
+        color: var(--vscode-descriptionForeground);
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        font-weight: 700;
+      }
+      
+      .user-email {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--vscode-foreground);
+        word-break: break-all;
+      }
+      
+      .logout-btn {
+        background: transparent;
+        border: 1px solid var(--vscode-button-secondaryBorder, var(--vscode-panel-border));
+        cursor: pointer;
+        padding: 6px 12px;
+        color: var(--vscode-descriptionForeground);
+        font-size: 11px;
+        border-radius: 6px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+      }
+      
+      .logout-btn:hover {
+        background: var(--vscode-button-secondaryHoverBackground);
+        color: var(--vscode-foreground);
+        border-color: var(--vscode-foreground);
+      }
+      
+      .api-key-section {
+        padding: 20px 24px;
+      }
+      
+      .api-key-label {
+        font-size: 10px;
+        color: var(--vscode-descriptionForeground);
+        margin-bottom: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        font-weight: 700;
+      }
+      
+      .api-key-display {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      
+      .api-key-value {
+        font-family: var(--vscode-editor-font-family, monospace);
+        font-size: 12px;
+        color: var(--vscode-foreground);
+        flex: 1;
+        padding: 8px 12px;
+        background: var(--vscode-input-background);
+        border: 1px solid var(--vscode-input-border);
+        border-radius: 8px;
+        opacity: 0.8;
+      }
+      
+      .copy-btn {
+        padding: 8px 14px;
+        font-size: 12px;
+        background: var(--vscode-button-secondaryBackground);
+        color: var(--vscode-button-secondaryForeground);
+        border: 1px solid var(--vscode-button-secondaryBorder);
+        cursor: pointer;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+      }
+      
+      .copy-btn:hover {
+        background: var(--vscode-button-secondaryHoverBackground);
+      }
+      
+      /* Quick Start Section */
+      .quick-start {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      
+      .section-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--vscode-foreground);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin: 0;
+        padding-left: 4px;
+        border-left: 3px solid var(--vscode-button-background);
+      }
+      
+      .step-card {
+        background: var(--vscode-sideBar-background);
+        border: 1px solid var(--vscode-editorWidget-border);
+        border-radius: 12px;
+        padding: 16px;
+        display: flex;
+        gap: 16px;
+        transition: all 0.2s ease;
+      }
+
+      .step-card:hover {
+        border-color: var(--vscode-focusBorder);
+        background: var(--vscode-list-hoverBackground);
+      }
+      
+      .step-number {
+        width: 24px;
+        height: 24px;
+        background: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 700;
+        flex-shrink: 0;
+      }
+      
+      .step-content {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      
+      .step-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--vscode-foreground);
+      }
+      
+      .step-desc {
+        font-size: 12px;
+        color: var(--vscode-descriptionForeground);
+        line-height: 1.5;
+      }
+
+      .code-tag {
+        font-family: var(--vscode-editor-font-family, monospace);
+        background: var(--vscode-textCodeBlock-background);
+        padding: 2px 6px;
         border-radius: 4px;
+        font-size: 11px;
+        color: var(--vscode-textLink-foreground);
       }
-      .copy-btn:hover { 
-        opacity: 0.9; 
+
+      /* Demo Images */
+      .demo-section {
+        margin-top: 24px;
+        display: flex;
+        gap: 16px;
       }
-      .help-section { 
-        margin-top: 12px; 
+
+      .demo-section:first-child {
+        margin-top: 0;
+      }
+
+      .demo-section-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .demo-section-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--vscode-foreground);
+      }
+
+      .demo-image-container {
+        margin-top: 12px;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid var(--vscode-editorWidget-border);
+        background: var(--vscode-editor-background);
+      }
+
+      .demo-image {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+
+      /* Try Example Button */
+      .try-example-container {
+        margin-top: 20px;
+        display: flex;
+        justify-content: center;
+      }
+
+      .try-example-btn {
+        width: 100%;
+        padding: 12px 24px;
+        background: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+
+      .try-example-btn:hover {
+        background: var(--vscode-button-hoverBackground);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      }
+
+      .try-example-btn:active {
+        transform: translateY(0);
+      }
+      
+      /* Animations */
+      @keyframes slideIn {
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      
+      .welcome-card, .profile-card, .step-card {
+        animation: slideIn 0.3s ease-out forwards;
+      }
+
+      .step-card:nth-child(2) { animation-delay: 0.1s; }
+      .step-card:nth-child(3) { animation-delay: 0.2s; }
+
+      /* Footer Section */
+      .footer-section {
+        margin-top: 24px;
+        padding: 20px 16px;
+        text-align: center;
+        border-top: 1px solid var(--vscode-editorWidget-border);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .footer-text {
+        font-size: 11px;
+        color: var(--vscode-descriptionForeground);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 600;
+      }
+
+      .website-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px 24px;
+        background: transparent;
+        color: var(--vscode-textLink-foreground);
+        text-decoration: none;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        border: 1.5px solid var(--vscode-textLink-foreground);
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .website-link::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: var(--vscode-textLink-foreground);
+        opacity: 0.1;
+        transition: left 0.3s ease;
+      }
+
+      .website-link:hover::before {
+        left: 0;
+      }
+
+      .website-link:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        border-color: var(--vscode-textLink-activeForeground);
+        color: var(--vscode-textLink-activeForeground);
+      }
+
+      .website-link:active {
+        transform: translateY(0);
       }
     `;
 
@@ -188,35 +591,97 @@ export class HomeViewProvider extends BaseViewProvider implements vscode.Webview
       <html lang="en">
       <head>
         <meta charset="UTF-8" />
-        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' ${webview.cspSource}; script-src 'nonce-${nonce}'; connect-src https: http:;" />
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' ${webview.cspSource}; script-src 'nonce-${nonce}'; connect-src https: http:; img-src ${webview.cspSource} https: data:;" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <style>${styles}</style>
       </head>
       <body>
-        <div id="logged-section" style="display:none;">
-          <div class="user-header">
-            <div class="user-info" id="user-email"></div>
-            <button class="logout-btn" id="logout" title="Logout">Logout</button>
+        <div class="container">
+          <!-- Logged Out State -->
+          <div id="login-section" class="welcome-card">
+            <div class="logo-title-container">
+              <div class="logo-container">
+                <img src="${logoUri}" alt="QVeris Logo" />
+              </div>
+              <h2 class="welcome-title">QVeris</h2>
+            </div>
+            <div class="welcome-header">
+              <p class="welcome-subtitle">AI-powered tools to supercharge your development workflow.</p>
+            </div>
+            <button id="oauth-login" class="login-button">
+              <span>Sign in with Browser</span>
+            </button>
+            <div class="status" id="status" style="display:none;"></div>
           </div>
-          <div class="api-key-section">
-            <div class="api-key-label">API Key</div>
-            <div class="api-key-display">
-              <div class="api-key-value" id="api-key-value"></div>
-              <button class="copy-btn" id="copy-api-key" title="Copy API Key">Copy</button>
+
+          <!-- Logged In State -->
+          <div id="logged-section" style="display:none;">
+            <div class="profile-card">
+              <div class="profile-header">
+                <div class="user-info-group">
+                  <div class="user-label">Account</div>
+                  <div class="user-email" id="user-email"></div>
+                </div>
+                <button class="logout-btn" id="logout">Sign Out</button>
+              </div>
+              <div class="api-key-section">
+                <div class="api-key-label">API Key</div>
+                <div class="api-key-display">
+                  <div class="api-key-value" id="api-key-value"></div>
+                  <button class="copy-btn" id="copy-api-key">Copy</button>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-        <div id="login-section" class="card">
-          <div class="status" id="login-hint">Sign in to Qveris to generate and store your API key.</div>
-          <div class="row">
-            <button id="oauth-login">Sign in with Browser</button>
+          
+          <!-- Quick Start Section -->
+          <div class="quick-start">
+            <h3 class="section-title">Quick Start</h3>
+            
+            <div class="step-card">
+              <div class="step-content">
+                <div class="demo-section">
+                  <div class="step-number">1</div>
+                  <div class="demo-section-content">
+                    <div class="demo-section-title">Ask in Chat</div>
+                    <div class="step-desc">
+                      Open Chat (<span class="code-tag">⌘L</span> / <span class="code-tag">Ctrl+L</span>) and describe what you need. Reference <span class="code-tag">@qveris.mdc</span> in your prompt to give the AI context about available tools and APIs.
+                    </div>
+                    <div class="demo-image-container">
+                      <img src="${demo1Uri}" alt="Ask in Chat Demo" class="demo-image" />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="demo-section">
+                  <div class="step-number">2</div>
+                  <div class="demo-section-content">
+                    <div class="demo-section-title">Execute Tools</div>
+                    <div class="step-desc">
+                      QVeris will find the best tools for you.
+                    </div>
+                    <div class="demo-image-container">
+                      <img src="${demo2Uri}" alt="Execute Tools Demo" class="demo-image" />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="try-example-container">
+                  <button class="try-example-btn" id="try-example-btn">
+                    <span>✨ Try Example Prompt</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="status" id="status"></div>
-        </div>
-        <div class="help-section">
-          <p>You need to sign in to your Qveris account first. If you don't have an account, please visit <a href="https://qveris.ai" target="_blank">qveris.ai</a> to create one. After successful login, the Qveris extension will automatically install the Qveris SDK MCP and configure the API key and Cursor rule for you.</p>
-          <p>You can type your requirements in the chat, such as "Help me create a Python test script to get real-time cryptocurrency prices". The Qveris SDK MCP will help you search for suitable tools and generate code to call those tools.</p>
-          <p>In the extension sidebar, you can also try searching for Qveris tools directly and execute the tools you find.</p>
+
+          <!-- Footer Section -->
+          <div class="footer-section">
+            <div class="footer-text">Learn more about QVeris</div>
+            <a href="https://qveris.ai" class="website-link" id="website-link" title="Visit QVeris.ai">
+              🌐 qveris.ai
+            </a>
+          </div>
         </div>
         <script nonce="${nonce}">
           const vscode = acquireVsCodeApi();
@@ -233,10 +698,11 @@ export class HomeViewProvider extends BaseViewProvider implements vscode.Webview
             if (loggedSection) loggedSection.style.display = 'block';
             if (userEmail) userEmail.textContent = email || 'Unknown';
             if (apiKeyValue) apiKeyValue.textContent = maskedKey || '';
-            if (loginHint) loginHint.style.display = 'none';
+            if (loginHint) loginHint.style.display = 'block';
             if (status) {
               status.textContent = '';
               status.className = 'status';
+              status.style.display = 'none';
             }
           };
 
@@ -247,11 +713,16 @@ export class HomeViewProvider extends BaseViewProvider implements vscode.Webview
             if (status) {
               status.textContent = '';
               status.className = 'status';
+              status.style.display = 'none';
             }
           };
 
           document.getElementById('oauth-login').addEventListener('click', () => {
-            if (status) status.textContent = 'Opening browser for login...';
+            if (status) {
+              status.textContent = 'Opening browser for login...';
+              status.className = 'status';
+              status.style.display = 'block';
+            }
             vscode.postMessage({ type: 'oauthLogin' });
           });
 
@@ -262,6 +733,23 @@ export class HomeViewProvider extends BaseViewProvider implements vscode.Webview
           if (copyApiKeyBtn) {
             copyApiKeyBtn.addEventListener('click', () => {
               vscode.postMessage({ type: 'copyApiKey' });
+            });
+          }
+
+          // Website link handler
+          const websiteLink = document.getElementById('website-link');
+          if (websiteLink) {
+            websiteLink.addEventListener('click', (e) => {
+              e.preventDefault();
+              vscode.postMessage({ type: 'openWebsite' });
+            });
+          }
+
+          // Try example button handler
+          const tryExampleBtn = document.getElementById('try-example-btn');
+          if (tryExampleBtn) {
+            tryExampleBtn.addEventListener('click', () => {
+              vscode.postMessage({ type: 'tryExample' });
             });
           }
 
@@ -282,6 +770,7 @@ export class HomeViewProvider extends BaseViewProvider implements vscode.Webview
               if (status) {
                 status.textContent = msg.message || 'Login failed';
                 status.className = 'status error';
+                status.style.display = 'block';
               }
             }
           });

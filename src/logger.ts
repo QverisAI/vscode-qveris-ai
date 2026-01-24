@@ -5,7 +5,7 @@ let isTestModeFlag: boolean = true;
 
 export function initializeLogger(context: vscode.ExtensionContext) {
   isTestModeFlag = context.extensionMode === vscode.ExtensionMode.Development;
-  outputChannel = vscode.window.createOutputChannel('Qveris AI');
+  outputChannel = vscode.window.createOutputChannel('QVeris AI');
 }
 
 export function isTestMode(): boolean {
@@ -19,7 +19,7 @@ export function log(message: string) {
   // Always log to output channel so users can see it
   // If outputChannel is not initialized yet, create it
   if (!outputChannel) {
-    outputChannel = vscode.window.createOutputChannel('Qveris AI');
+    outputChannel = vscode.window.createOutputChannel('QVeris AI');
   }
   outputChannel.appendLine(message);
   

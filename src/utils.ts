@@ -304,12 +304,12 @@ export async function ensureMcpConfigWithApiKey(apiKey: string) {
   const failed = results.filter(r => !r.ok);
 
   if (succeeded.length > 0) {
-    vscode.window.showInformationMessage(`Qveris MCP configuration updated (${succeeded.join(', ')}).`);
+    vscode.window.showInformationMessage(`QVeris MCP configuration updated (${succeeded.join(', ')}).`);
   }
 
   if (failed.length > 0) {
     const [first] = failed;
-    vscode.window.showErrorMessage(`Failed to update Qveris MCP config at ${failed.map(f => f.mcpPath).join(', ')}: ${first?.error?.message || first?.error}`);
+    vscode.window.showErrorMessage(`Failed to update QVeris MCP config at ${failed.map(f => f.mcpPath).join(', ')}: ${first?.error?.message || first?.error}`);
   }
 }
 
@@ -365,9 +365,9 @@ export async function copyCursorPrompt(context: vscode.ExtensionContext, markCop
     if (markCopied) {
       await context.globalState.update('qverisCursorPromptCopied', true);
     }
-    vscode.window.showInformationMessage('Qveris MCP prompt copied to clipboard for this workspace rules file.');
+    vscode.window.showInformationMessage('QVeris MCP prompt copied to clipboard for this workspace rules file.');
   } catch (error: any) {
-    vscode.window.showErrorMessage(`Failed to copy Qveris prompt: ${error?.message || error}`);
+    vscode.window.showErrorMessage(`Failed to copy QVeris prompt: ${error?.message || error}`);
   }
 }
 
@@ -377,7 +377,7 @@ export async function openCursorPromptDoc() {
     language: 'markdown'
   });
   await vscode.window.showTextDocument(doc, { preview: false });
-  vscode.window.showInformationMessage('Qveris MCP prompt opened. Save or paste it into a workspace rules file.');
+  vscode.window.showInformationMessage('QVeris MCP prompt opened. Save or paste it into a workspace rules file.');
 }
 
 function expandHome(filePath: string) {
@@ -417,41 +417,73 @@ function buildQoderRulesFileContent(existing: string) {
 }
 
 export async function maybeEnsureCursorPromptInRules(context: vscode.ExtensionContext, forceReplace: boolean = false, silent: boolean = false) {
-  if (!isCursorApp()) return;
+  console.log(`QVeris: maybeEnsureCursorPromptInRules called with forceReplace=${forceReplace}`);
+  
+  if (!isCursorApp()) {
+    console.log(`QVeris: Not in Cursor app, skipping Cursor rules update`);
+    return;
+  }
 
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-  if (!workspaceFolder) return;
+  if (!workspaceFolder) {
+    console.log(`QVeris: No workspace folder found, skipping Cursor rules update`);
+    return;
+  }
 
   const workspaceRoot = workspaceFolder.uri.fsPath;
+  console.log(`QVeris: Workspace root: ${workspaceRoot}`);
+  
   const config = vscode.workspace.getConfiguration('qverisAi');
   const rulesPathRaw = config.get<string>('cursorRulesPath')?.trim() || '.cursor/rules/qveris.mdc';
   const rulesPath = resolveRulesPath(rulesPathRaw, workspaceRoot);
+  console.log(`QVeris: Target rule file path: ${rulesPath}`);
 
   try {
     const existing = await fs.readFile(rulesPath, 'utf8').catch(() => '');
+    const fileExists = !!existing;
+    console.log(`QVeris: File exists: ${fileExists}, file size: ${existing.length} bytes`);
+    
+    const containsPrompt = existing.includes(CURSOR_PROMPT);
+    console.log(`QVeris: File contains current prompt: ${containsPrompt}`);
+    console.log(`QVeris: forceReplace=${forceReplace}, will update: ${forceReplace || !containsPrompt}`);
     
     // If forceReplace is true or file doesn't contain the prompt, write/update it
-    if (forceReplace || !existing.includes(CURSOR_PROMPT)) {
+    if (forceReplace || !containsPrompt) {
+      console.log(`QVeris: Starting file update...`);
       const dir = path.dirname(rulesPath);
       await fs.mkdir(dir, { recursive: true });
 
       const newContent = buildRulesFileContent(existing);
+      console.log(`QVeris: New content size: ${newContent.length} bytes`);
 
       await fs.writeFile(rulesPath, newContent, 'utf8');
+      console.log(`QVeris: File written successfully`);
       await context.globalState.update('qverisCursorPromptCopied', true);
+      
+      // Log the action
+      if (forceReplace && fileExists) {
+        console.log(`QVeris: Rule file replaced due to version update: ${rulesPath}`);
+      } else if (!fileExists) {
+        console.log(`QVeris: Rule file created: ${rulesPath}`);
+      } else {
+        console.log(`QVeris: Rule file updated: ${rulesPath}`);
+      }
+      
       if (!silent) {
         if (forceReplace) {
-          vscode.window.showInformationMessage('Qveris MCP prompt updated in workspace rules file.');
+          vscode.window.showInformationMessage('QVeris MCP prompt updated in workspace rules file.');
         } else {
-          vscode.window.showInformationMessage('Qveris MCP prompt written to this workspace rules file.');
+          vscode.window.showInformationMessage('QVeris MCP prompt written to this workspace rules file.');
         }
       }
     } else {
       await context.globalState.update('qverisCursorPromptCopied', true);
+      console.log(`QVeris: Rule file already up to date: ${rulesPath}`);
     }
   } catch (error: any) {
+    console.error(`QVeris: Failed to update rule file: ${error?.message || error}`);
     if (!silent) {
-      vscode.window.showErrorMessage(`Failed to write Qveris prompt to workspace rules: ${error?.message || error}`);
+      vscode.window.showErrorMessage(`Failed to write QVeris prompt to workspace rules: ${error?.message || error}`);
     }
   }
 }
@@ -467,6 +499,7 @@ export async function maybeEnsureTraePromptInRules(context: vscode.ExtensionCont
 
   try {
     const existing = await fs.readFile(rulesPath, 'utf8').catch(() => '');
+    const fileExists = !!existing;
     
     // If forceReplace is true or file doesn't contain the prompt, write/update it
     if (forceReplace || !existing.includes(CURSOR_PROMPT)) {
@@ -477,19 +510,31 @@ export async function maybeEnsureTraePromptInRules(context: vscode.ExtensionCont
 
       await fs.writeFile(rulesPath, newContent, 'utf8');
       await context.globalState.update('qverisTraePromptCopied', true);
+      
+      // Log the action
+      if (forceReplace && fileExists) {
+        console.log(`QVeris: Rule file replaced due to version update: ${rulesPath}`);
+      } else if (!fileExists) {
+        console.log(`QVeris: Rule file created: ${rulesPath}`);
+      } else {
+        console.log(`QVeris: Rule file updated: ${rulesPath}`);
+      }
+      
       if (!silent) {
         if (forceReplace) {
-          vscode.window.showInformationMessage('Qveris MCP prompt updated in workspace rules file.');
+          vscode.window.showInformationMessage('QVeris MCP prompt updated in workspace rules file.');
         } else {
-          vscode.window.showInformationMessage('Qveris MCP prompt written to this workspace rules file.');
+          vscode.window.showInformationMessage('QVeris MCP prompt written to this workspace rules file.');
         }
       }
     } else {
       await context.globalState.update('qverisTraePromptCopied', true);
+      console.log(`QVeris: Rule file already up to date: ${rulesPath}`);
     }
   } catch (error: any) {
+    console.error(`QVeris: Failed to update rule file: ${error?.message || error}`);
     if (!silent) {
-      vscode.window.showErrorMessage(`Failed to write Qveris prompt to workspace rules: ${error?.message || error}`);
+      vscode.window.showErrorMessage(`Failed to write QVeris prompt to workspace rules: ${error?.message || error}`);
     }
   }
 }
@@ -501,6 +546,7 @@ export async function maybeEnsureKiroPromptInRules(context: vscode.ExtensionCont
 
   try {
     const existing = await fs.readFile(rulesPath, 'utf8').catch(() => '');
+    const fileExists = !!existing;
     
     // If forceReplace is true or file doesn't contain the prompt, write/update it
     if (forceReplace || !existing.includes(CURSOR_PROMPT)) {
@@ -511,19 +557,31 @@ export async function maybeEnsureKiroPromptInRules(context: vscode.ExtensionCont
 
       await fs.writeFile(rulesPath, newContent, 'utf8');
       await context.globalState.update('qverisKiroPromptCopied', true);
+      
+      // Log the action
+      if (forceReplace && fileExists) {
+        console.log(`QVeris: Rule file replaced due to version update: ${rulesPath}`);
+      } else if (!fileExists) {
+        console.log(`QVeris: Rule file created: ${rulesPath}`);
+      } else {
+        console.log(`QVeris: Rule file updated: ${rulesPath}`);
+      }
+      
       if (!silent) {
         if (forceReplace) {
-          vscode.window.showInformationMessage('Qveris MCP prompt updated in Kiro rules file.');
+          vscode.window.showInformationMessage('QVeris MCP prompt updated in Kiro rules file.');
         } else {
-          vscode.window.showInformationMessage('Qveris MCP prompt written to Kiro rules file.');
+          vscode.window.showInformationMessage('QVeris MCP prompt written to Kiro rules file.');
         }
       }
     } else {
       await context.globalState.update('qverisKiroPromptCopied', true);
+      console.log(`QVeris: Rule file already up to date: ${rulesPath}`);
     }
   } catch (error: any) {
+    console.error(`QVeris: Failed to update rule file: ${error?.message || error}`);
     if (!silent) {
-      vscode.window.showErrorMessage(`Failed to write Qveris prompt to Kiro rules: ${error?.message || error}`);
+      vscode.window.showErrorMessage(`Failed to write QVeris prompt to Kiro rules: ${error?.message || error}`);
     }
   }
 }
@@ -535,6 +593,7 @@ export async function maybeEnsureCodebuddyPromptInRules(context: vscode.Extensio
 
   try {
     const existing = await fs.readFile(rulesPath, 'utf8').catch(() => '');
+    const fileExists = !!existing;
     
     // If forceReplace is true or file doesn't contain the prompt, write/update it
     if (forceReplace || !existing.includes(CURSOR_PROMPT)) {
@@ -545,6 +604,16 @@ export async function maybeEnsureCodebuddyPromptInRules(context: vscode.Extensio
 
       await fs.writeFile(rulesPath, newContent, 'utf8');
       await context.globalState.update('qverisCodebuddyPromptCopied', true);
+      
+      // Log the action
+      if (forceReplace && fileExists) {
+        console.log(`QVeris: Rule file replaced due to version update: ${rulesPath}`);
+      } else if (!fileExists) {
+        console.log(`QVeris: Rule file created: ${rulesPath}`);
+      } else {
+        console.log(`QVeris: Rule file updated: ${rulesPath}`);
+      }
+      
       if (!silent) {
         if (forceReplace) {
           vscode.window.showInformationMessage('QVeris MCP prompt updated in Codebuddy rules file.');
@@ -554,8 +623,10 @@ export async function maybeEnsureCodebuddyPromptInRules(context: vscode.Extensio
       }
     } else {
       await context.globalState.update('qverisCodebuddyPromptCopied', true);
+      console.log(`QVeris: Rule file already up to date: ${rulesPath}`);
     }
   } catch (error: any) {
+    console.error(`QVeris: Failed to update rule file: ${error?.message || error}`);
     if (!silent) {
       vscode.window.showErrorMessage(`Failed to write QVeris prompt to Codebuddy rules: ${error?.message || error}`);
     }
@@ -573,6 +644,7 @@ export async function maybeEnsureLingmaPromptInRules(context: vscode.ExtensionCo
 
   try {
     const existing = await fs.readFile(rulesPath, 'utf8').catch(() => '');
+    const fileExists = !!existing;
     
     // If forceReplace is true or file doesn't contain the prompt, write/update it
     if (forceReplace || !existing.includes(CURSOR_PROMPT)) {
@@ -583,6 +655,16 @@ export async function maybeEnsureLingmaPromptInRules(context: vscode.ExtensionCo
 
       await fs.writeFile(rulesPath, newContent, 'utf8');
       await context.globalState.update('qverisLingmaPromptCopied', true);
+      
+      // Log the action
+      if (forceReplace && fileExists) {
+        console.log(`QVeris: Rule file replaced due to version update: ${rulesPath}`);
+      } else if (!fileExists) {
+        console.log(`QVeris: Rule file created: ${rulesPath}`);
+      } else {
+        console.log(`QVeris: Rule file updated: ${rulesPath}`);
+      }
+      
       if (!silent) {
         if (forceReplace) {
           vscode.window.showInformationMessage('QVeris MCP prompt updated in Lingma workspace rules file.');
@@ -592,8 +674,10 @@ export async function maybeEnsureLingmaPromptInRules(context: vscode.ExtensionCo
       }
     } else {
       await context.globalState.update('qverisLingmaPromptCopied', true);
+      console.log(`QVeris: Rule file already up to date: ${rulesPath}`);
     }
   } catch (error: any) {
+    console.error(`QVeris: Failed to update rule file: ${error?.message || error}`);
     if (!silent) {
       vscode.window.showErrorMessage(`Failed to write QVeris prompt to Lingma workspace rules: ${error?.message || error}`);
     }
@@ -611,6 +695,7 @@ export async function maybeEnsureQoderPromptInRules(context: vscode.ExtensionCon
 
   try {
     const existing = await fs.readFile(rulesPath, 'utf8').catch(() => '');
+    const fileExists = !!existing;
     
     // If forceReplace is true or file doesn't contain the prompt, write/update it
     if (forceReplace || !existing.includes(CURSOR_PROMPT)) {
@@ -621,6 +706,16 @@ export async function maybeEnsureQoderPromptInRules(context: vscode.ExtensionCon
 
       await fs.writeFile(rulesPath, newContent, 'utf8');
       await context.globalState.update('qverisQoderPromptCopied', true);
+      
+      // Log the action
+      if (forceReplace && fileExists) {
+        console.log(`QVeris: Rule file replaced due to version update: ${rulesPath}`);
+      } else if (!fileExists) {
+        console.log(`QVeris: Rule file created: ${rulesPath}`);
+      } else {
+        console.log(`QVeris: Rule file updated: ${rulesPath}`);
+      }
+      
       if (!silent) {
         if (forceReplace) {
           vscode.window.showInformationMessage('QVeris MCP prompt updated in Qoder workspace rules file.');
@@ -630,8 +725,10 @@ export async function maybeEnsureQoderPromptInRules(context: vscode.ExtensionCon
       }
     } else {
       await context.globalState.update('qverisQoderPromptCopied', true);
+      console.log(`QVeris: Rule file already up to date: ${rulesPath}`);
     }
   } catch (error: any) {
+    console.error(`QVeris: Failed to update rule file: ${error?.message || error}`);
     if (!silent) {
       vscode.window.showErrorMessage(`Failed to write QVeris prompt to Qoder workspace rules: ${error?.message || error}`);
     }

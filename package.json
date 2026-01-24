@@ -1,16 +1,16 @@
 {
   "name": "qveris-ai",
-  "displayName": "Qveris AI",
-  "description": "The official extension of Qveris AI can assist you in searching and executing the AI tools you need from a vast array of options. You don't need to provide an ApiKey or pay for each tool individually, as Qveris AI handles all of this for you.",
-  "version": "1.0.1",
+  "displayName": "QVeris AI",
+  "description": "The official extension of QVeris AI can assist you in searching and executing the AI tools you need from a vast array of options. You don't need to provide an ApiKey or pay for each tool individually, as Qveris AI handles all of this for you.",
+  "version": "1.1.0",
   "publisher": "QverisAI",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/QverisAI/vscode-qveris-ai"
+    "url": "https://github.com/QVerisAI/vscode-qveris-ai"
   },
   "bugs": {
-    "url": "https://github.com/QverisAI/vscode-qveris-ai/issues"
+    "url": "https://github.com/QVerisAI/vscode-qveris-ai/issues"
   },
   "homepage": "https://qveris.ai",
   "icon": "media/qveris.png",
@@ -30,7 +30,7 @@
       "activitybar": [
         {
           "id": "qverisAi",
-          "title": "Qveris AI",
+          "title": "QVeris AI",
           "icon": "media/qveris.png"
         }
       ]
@@ -41,52 +41,46 @@
           "id": "qverisAi.home",
           "name": "Home",
           "type": "webview"
-        },
-        {
-          "id": "qverisAi.toolSearch",
-          "name": "Tool Search",
-          "type": "webview"
-        },
-        {
-          "id": "qverisAi.toolSpecification",
-          "name": "Tool Specification",
-          "type": "webview"
         }
       ]
     },
     "commands": [
       {
         "command": "vscode-qveris-ai.openWebsite",
-        "title": "Qveris AI: Open qveris.ai"
+        "title": "QVeris AI: Open qveris.ai"
       },
       {
         "command": "vscode-qveris-ai.copyApiKey",
-        "title": "Qveris AI: Copy API Key"
+        "title": "QVeris AI: Copy API Key"
       },
       {
         "command": "vscode-qveris-ai.refreshSession",
-        "title": "Qveris AI: Refresh Login/API Key"
+        "title": "QVeris AI: Refresh Login/API Key"
       },
       {
         "command": "vscode-qveris-ai.copyCursorPrompt",
-        "title": "Qveris AI: Copy Cursor Workspace Rule"
+        "title": "QVeris AI: Copy Cursor Workspace Rule"
       },
       {
         "command": "vscode-qveris-ai.openCursorPromptDoc",
-        "title": "Qveris AI: Open Cursor Workspace Rule Text"
+        "title": "QVeris AI: Open Cursor Workspace Rule Text"
       },
       {
         "command": "vscode-qveris-ai.oauthLogin",
-        "title": "Qveris AI: Sign in with Browser"
+        "title": "QVeris AI: Sign in with Browser"
       },
       {
         "command": "vscode-qveris-ai.showLogs",
-        "title": "Qveris AI: Show Debug Logs"
+        "title": "QVeris AI: Show Debug Logs"
+      },
+      {
+        "command": "vscode-qveris-ai.tryExample",
+        "title": "QVeris AI: Try Example Prompt"
       }
     ],
     "configuration": {
       "type": "object",
-      "title": "Qveris AI",
+      "title": "QVeris AI",
       "properties": {
         "qverisAi.apiKeyName": {
           "type": "string",
@@ -96,12 +90,12 @@
         "qverisAi.backendUrl": {
           "type": "string",
           "default": "https://qveris.ai",
-          "description": "Base URL for Qveris auth endpoints (change for staging)."
+          "description": "Base URL for QVeris auth endpoints (change for staging)."
         },
         "qverisAi.cursorUserRule": {
           "type": "string",
-          "default": "You can use qveris MCP Server to dynamically search and execute tools to help the user. First think about what kind of tools might be useful to accomplish the user's task. Then use the search_tools tool with query describing the capability of the tool, not what params you want to pass to the tool later. Then call a suitable searched tool using the execute_tool tool, passing parameters to the searched tool through params_to_tool. You could reference the examples given if any for each tool. You may call make multiple tool calls in a single response.",
-          "description": "Prompt text to add into a Cursor workspace rules file after installing the Qveris MCP server."
+          "default": "You can use QVeris MCP Server to dynamically search and execute tools to help the user. First think about what kind of tools might be useful to accomplish the user's task. Then use the search_tools tool with query describing the capability of the tool, not what params you want to pass to the tool later. Then call a suitable searched tool using the execute_tool tool, passing parameters to the searched tool through params_to_tool. You could reference the examples given if any for each tool. You may call make multiple tool calls in a single response.",
+          "description": "Prompt text to add into a Cursor workspace rules file after installing the QVeris MCP server."
         },
         "qverisAi.cursorRulesPath": {
           "type": "string",

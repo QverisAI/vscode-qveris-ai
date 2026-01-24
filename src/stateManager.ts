@@ -36,8 +36,6 @@ export class ViewStateManager {
     // Broadcast to all webviews
     const views = [
       "qverisAi.home",
-      "qverisAi.toolSearch",
-      "qverisAi.toolSpecification",
     ];
     // Note: We'll need to track view instances to broadcast
     // For now, each view will check state on visibility change
